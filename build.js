@@ -26,19 +26,19 @@ pegjs(thmlGrammar, _P('src/ccs/thml_grammar.pegjs'), 'THMLParser', ["--allowed-s
 // util.js
 var utilTargetFile = _P('lib/util.js');
 var utilSourceFiles = getFilesMatchingGlob('src/util/*.ts');
-createTscFileTask(utilTargetFile, utilSourceFiles, {definitionFile: true}, 'Compile ' + utilTargetFile);
+createTscFileTask(utilTargetFile, utilSourceFiles, {definitionFile: true, sourceMap: true}, 'Compile ' + utilTargetFile);
 
 // data.js
 var dataTargetFile = _P('lib/data.js');
 var dataSourceFiles = getFilesMatchingGlob('src/data/*.ts');
-createTscFileTask(dataTargetFile, dataSourceFiles, {definitionFile: true}, 'Compile ' + dataTargetFile);
+createTscFileTask(dataTargetFile, dataSourceFiles, {definitionFile: true, sourceMap: true}, 'Compile ' + dataTargetFile);
 
 // ccs.js
 var ccsTargetFile = _P('lib/ccs.js');
 var ccsSourceFiles = new jake.FileList();
 ccsSourceFiles.include('src/ccs/*.ts');
 ccsSourceFiles = ccsSourceFiles.toArray();
-createTscFileTask(ccsTargetFile, ccsSourceFiles, {definitionFile: true}, 'Compile ' + ccsTargetFile);
+createTscFileTask(ccsTargetFile, ccsSourceFiles, {definitionFile: true, sourceMap: true}, 'Compile ' + ccsTargetFile);
 
 // verifier worker
 var workerVerifier = _P('lib/workers/verifier.js');
