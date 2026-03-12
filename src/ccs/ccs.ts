@@ -837,6 +837,12 @@ module CCS {
         }
     }
 
+    export class ExpandingStrictSuccessorGenerator extends StrictSuccessorGenerator {
+        constructor(graph : Graph, cache?) {
+            super(graph, cache);
+        }
+    }
+
     export class GrowingIndexedArraySet<T> {
             
         private elements = [];
@@ -870,7 +876,7 @@ module CCS {
     export function getSuccGenerator(graph : Graph, options : any) : SuccessorGenerator {
         var settings = { inputMode: "CCS", succGen: "strong", reduce: true, time: "timed"},
             succGenerator: SuccessorGenerator,
-            treeReducer: Traverse.ProcessTreeReducer;
+            treeReducer: Traverse.ProcessTreeReducer; 
 
         for (var optionName in options) {
             settings[optionName] = options[optionName];
@@ -894,6 +900,7 @@ module CCS {
         if (settings.reduce) {
             succGenerator = new Traverse.ReducingSuccessorGenerator(succGenerator, treeReducer);
         }
+        
         
         
         if (settings.inputMode === "CCS") {

@@ -594,8 +594,200 @@ module Equivalence {
             return result;
         }
     }
+
+    export function checkBisimilarUpToBisimilar(attackSuccGen : ccs.SuccessorGenerator, defendSuccGen : ccs.SuccessorGenerator, leftProcessId, rightProcessId) {
+        var graph = attackSuccGen.getGraph(),
+            parent = Object.create(null),
+            success = Object.create(null),
+            failure = Object.create(null),
+            active = Object.create(null),
+            relation = Object.create(null);
+
+        function find(id : ccs.ProcessId) : ccs.ProcessId {
+            var p = parent[id];
+            if (!p) return id;
+            if (p !== id) {
+                parent[id] = find(p);
+            }
+            return parent[id];
+        }
+
+        function union(leftId : ccs.ProcessId, rightId : ccs.ProcessId) : ccs.ProcessId {
+            var leftRoot = find(leftId),
+                rightRoot = find(rightId),
+                repr : ccs.ProcessId,
+                other : ccs.ProcessId;
+            if (leftRoot === rightRoot) return leftRoot;
+            repr = leftRoot < rightRoot ? leftRoot : rightRoot;
+            other = repr === leftRoot ? rightRoot : leftRoot;
+            parent[repr] = repr;
+            parent[other] = repr;
+            return repr;
+        }
+
+        function getProcess(processId : ccs.ProcessId) : ccs.Process {
+            return attackSuccGen.getProcessById(processId);
+        }
+
+        function buildComposition(subProcesses : ccs.Process[]) : ccs.Process {
+            if (subProcesses.length === 0) return graph.getNullProcess();
+            if (subProcesses.length === 1) return subProcesses[0];
+            return graph.newCompositionProcess(subProcesses);
+        }
+
+        function removeAtIndex(processes : ccs.Process[], index : number) : ccs.Process[] {
+            return processes.filter((_, i) => i !== index);
+        }
+
+        function getCompositionFactors(process : ccs.Process) : ccs.Process[] {
+            if (!(process instanceof ccs.CompositionProcess)) return [process];
+            var result = [];
+            (<ccs.CompositionProcess> process).subProcesses.forEach(subProcess => {
+                getCompositionFactors(subProcess).forEach(factor => result.push(factor));
+            });
+            return result;
+        }
+
+        function pairKey(leftId : ccs.ProcessId, rightId : ccs.ProcessId) : string {
+            return leftId + "||" + rightId;
+        }
+
+        function reduceSharedContext(leftId : ccs.ProcessId, rightId : ccs.ProcessId) : [ccs.ProcessId, ccs.ProcessId][] {
+            var left = getProcess(leftId),
+                right = getProcess(rightId),
+                reducedPairs : [ccs.ProcessId, ccs.ProcessId][] = [],
+                seenPairs = Object.create(null);
+
+            function addReducedPair(nextLeftId : ccs.ProcessId, nextRightId : ccs.ProcessId) {
+                var key = pairKey(find(nextLeftId), find(nextRightId));
+                if (!seenPairs[key]) {
+                    seenPairs[key] = true;
+                    reducedPairs.push([nextLeftId, nextRightId]);
+                }
+            }
+
+            if (left instanceof ccs.ActionPrefixProcess && right instanceof ccs.ActionPrefixProcess) {
+                if (left.action.equals(right.action)) {
+                    addReducedPair(left.nextProcess.id, right.nextProcess.id);
+                }
+            }
+
+            if (left instanceof ccs.RestrictionProcess && right instanceof ccs.RestrictionProcess) {
+                if (left.restrictedLabels.equals(right.restrictedLabels)) {
+                    addReducedPair(left.subProcess.id, right.subProcess.id);
+                }
+            }
+
+            if (left instanceof ccs.RelabellingProcess && right instanceof ccs.RelabellingProcess) {
+                if (left.relabellings.equals(right.relabellings)) {
+                    addReducedPair(left.subProcess.id, right.subProcess.id);
+                }
+            }
+
+            if (left instanceof ccs.CompositionProcess && right instanceof ccs.CompositionProcess) {
+                var leftFactors = getCompositionFactors(left),
+                    rightFactors = getCompositionFactors(right);
+                leftFactors.forEach((leftSubProc, leftIndex) => {
+                    rightFactors.forEach((rightSubProc, rightIndex) => {
+                        if (find(leftSubProc.id) === find(rightSubProc.id)) {
+                            var leftResidual = buildComposition(removeAtIndex(leftFactors, leftIndex)),
+                                rightResidual = buildComposition(removeAtIndex(rightFactors, rightIndex));
+                            addReducedPair(leftResidual.id, rightResidual.id);
+                        }
+                    });
+                });
+            }
+
+            return reducedPairs;
+        }
+
+        function canMatchAll(attackFromId : ccs.ProcessId, defendFromId : ccs.ProcessId) : boolean {
+            var attackTransitions = attackSuccGen.getSuccessors(attackFromId).toArray(),
+                defendTransitions = defendSuccGen.getSuccessors(defendFromId).toArray();
+
+            for (var i = 0; i < attackTransitions.length; ++i) {
+                var attackTransition = attackTransitions[i],
+                    matched = false;
+                for (var j = 0; j < defendTransitions.length; ++j) {
+                    var defendTransition = defendTransitions[j];
+                    if (defendTransition.action.equals(attackTransition.action) &&
+                        prove(attackTransition.targetProcess.id, defendTransition.targetProcess.id)) {
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) return false;
+            }
+            return true;
+        }
+
+        function reductionScore(nextPair : [ccs.ProcessId, ccs.ProcessId]) : number {
+            var nextLeftId = find(nextPair[0]),
+                nextRightId = find(nextPair[1]),
+                nextKey = pairKey(nextLeftId, nextRightId);
+            if (nextLeftId === nextRightId) return 3;
+            if (active[nextKey] || success[nextKey]) return 2;
+            if (failure[nextKey]) return 0;
+            return 1;
+        }
+
+        function prove(leftId : ccs.ProcessId, rightId : ccs.ProcessId) : boolean {
+            leftId = find(leftId);
+            rightId = find(rightId);
+
+            if (leftId === rightId) return true;
+
+            var key = pairKey(leftId, rightId);
+            if (success[key]) return true;
+            if (failure[key]) return false;
+            if (active[key]) return true;
+
+            active[key] = true;
+            relation[key] = [leftId, rightId];
+
+            try {
+                var reducedPairs = reduceSharedContext(leftId, rightId);
+                reducedPairs.sort((leftPair, rightPair) => reductionScore(rightPair) - reductionScore(leftPair));
+                for (var i = 0; i < reducedPairs.length; ++i) {
+                    if (prove(reducedPairs[i][0], reducedPairs[i][1])) {
+                        success[key] = true;
+                        union(leftId, rightId);
+                        return true;
+                    }
+                }
+
+                if (!canMatchAll(leftId, rightId) || !canMatchAll(rightId, leftId)) {
+                    failure[key] = true;
+                    return false;
+                }
+
+                success[key] = true;
+                union(leftId, rightId);
+                return true;
+            } finally {
+                delete active[key];
+            }
+        }
+
+        return {
+            isBisimilar: prove(leftProcessId, rightProcessId),
+            relation: relation,
+            representativeOf: find
+        };
+    }
+
+    export function isBisimilarUpToBisimilar(attackSuccGen : ccs.SuccessorGenerator, defendSuccGen : ccs.SuccessorGenerator, leftProcessId, rightProcessId) {
+        return checkBisimilarUpToBisimilar(attackSuccGen, defendSuccGen, leftProcessId, rightProcessId).isBisimilar;
+    }
+        
     
     export function isBisimilar(attackSuccGen : ccs.SuccessorGenerator, defendSuccGen : ccs.SuccessorGenerator, leftProcessId, rightProcessId, graph?) {
+        if (attackSuccGen === defendSuccGen) {
+            var upToResult = checkBisimilarUpToBisimilar(attackSuccGen, defendSuccGen, leftProcessId, rightProcessId);
+            if (upToResult.isBisimilar) {
+                return true;
+            }
+        }
         var bisimDG = new Equivalence.BisimulationDG(attackSuccGen, defendSuccGen, leftProcessId, rightProcessId),
         marking = dg.liuSmolkaLocal2(0, bisimDG);
         return marking.getMarking(0) === marking.ZERO;
