@@ -318,4 +318,230 @@ module Traverse {
             return result;
         }
     }
+
+    export class NoRedundancySuccessorGenerator implements ccs.SuccessorGenerator {
+
+        constructor(public succGenerator : ccs.SuccessorGenerator, public reducer : ProcessTreeReducer) {}
+
+        getGraph() {
+            return this.succGenerator.getGraph();
+        }
+
+        getProcessByName(processName : string) : ccs.Process {
+            var namedProcess = this.succGenerator.getProcessByName(processName);
+            return this.reducer.visit(namedProcess);
+        }
+
+        getProcessById(processId : ccs.ProcessId) : ccs.Process {
+            var proc = this.succGenerator.getProcessById(processId);
+            return this.reducer.visit(proc);
+        }
+
+        getNormalFormFromProcess(process: ccs.Process) : ccs.Process {
+            var getSubProcessesInNormalForm = (process: ccs.Process) => {
+                var newSubProcesses: ccs.Process[] = [];
+
+                if (process instanceof ccs.SummationProcess || process instanceof ccs.CompositionProcess) {
+                    // Change all subprocesses to normal form
+                    process.subProcesses.forEach((subProcess) => {
+                        var normalFormSubProcess = this.getNormalFormFromProcess(subProcess);
+                        newSubProcesses.concat(normalFormSubProcess);
+                    });
+                }
+                return newSubProcesses;
+            };
+
+            var normalFormProcess: ccs.Process = process;
+            if (process instanceof ccs.SummationProcess) {
+                // Change all subprocesses to normal form
+                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
+
+                //Clean from nil and repeated processes
+                var newSubProcesses: ccs.Process[] = [];
+                normalFormSubprocesses.forEach(subProcess => {
+                    if (subProcess instanceof ccs.NullProcess) {
+                        return;
+                    }
+                    else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
+                        return;
+                    }
+                    else {
+                        // If not nil or repeated, add
+                        newSubProcesses.concat(subProcess);
+                    }
+                });
+                // Overwrite ordered subprocesses
+                newSubProcesses.sort();
+                normalFormProcess = new ccs.SummationProcess(newSubProcesses);
+            }
+            else if (process instanceof ccs.ActionPrefixProcess) {
+                normalFormProcess = new ccs.ActionPrefixProcess(process.action, this.getNormalFormFromProcess(process.nextProcess));
+            }
+            else if (process instanceof ccs.CompositionProcess) {
+                // Change all subprocesses to normal form
+                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
+
+                //Clean from nil processes
+                var newSubProcesses: ccs.Process[] = [];
+                normalFormSubprocesses.forEach(subProcess => {
+                    if (subProcess instanceof ccs.NullProcess) {
+                        return;
+                    }
+                    else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
+                        return;
+                    }
+                    else {
+                        // If not nil or repeated, add
+                        newSubProcesses.concat(subProcess);
+                    }
+                });
+                // Overwrite ordered subprocesses
+                newSubProcesses.sort();
+                normalFormProcess = new ccs.SummationProcess(newSubProcesses);
+            }
+            else if (process instanceof ccs.RelabellingProcess) {
+                // TODO: Take a deeper look at this later
+                normalFormProcess = new ccs.RelabellingProcess(getSubProcessesInNormalForm(process)[0], process.relabellings);
+            }
+            else if (process instanceof ccs.RestrictionProcess) {
+                // TODO: Take a deeper look at this later
+                normalFormProcess = new ccs.RestrictionProcess(getSubProcessesInNormalForm(process)[0], process.restrictedLabels);
+            }
+            else if (process instanceof ccs.NamedProcess) {
+                // 🙏🙏 Nothing to rewrite
+            }
+
+            // Return changed process
+            return normalFormProcess;
+        }
+
+        getSuccessors(processId : ccs.ProcessId) : ccs.TransitionSet {
+            var successors = new ccs.TransitionSet();
+            var transitions: ccs.TransitionSet = this.succGenerator.getSuccessors(processId);
+            // For each possible transition from the process, check if normal form of targets is redundant
+            transitions.forEach((transition) => {
+                this.getGraph().getProcesses().forEach(process => {
+                    if (this.getNormalFormFromProcess(transition.targetProcess) == this.getNormalFormFromProcess(process)) {
+                        return;
+                    }
+                    else {
+                        successors.add(transition)
+                    }
+                });
+            });
+            // If not, add it
+            
+            return successors;
+        }
+    }
+
+    export function reduceProcess(process: ccs.Process): ccs.Process {
+        const reducer = new ProcessReducer();
+        return process.dispatchOn(reducer);
+    }
+
+    class ProcessReducer implements ccs.ProcessDispatchHandler<ccs.Process> {
+
+    dispatchNullProcess(process: ccs.NullProcess): ccs.Process {
+        return process;
+    }
+
+    dispatchNamedProcess(process: ccs.NamedProcess): ccs.Process {
+        const reduced = process.subProcess.dispatchOn(this);
+
+        // A ≡ P if it is just a wrapper
+        if (reduced.id === process.name) return reduced;
+
+        return new ccs.NamedProcess(process.name, reduced);
+    }
+
+    dispatchSummationProcess(process: ccs.SummationProcess): ccs.Process {
+        const flattened: ccs.Process[] = [];
+
+        for (const p of process.subProcesses) {
+            const r = p.dispatchOn(this);
+
+            if (r instanceof ccs.NullProcess) continue;
+
+            if (r instanceof ccs.SummationProcess) {
+                flattened.push(...r.subProcesses);
+            } else {
+                flattened.push(r);
+            }
+        }
+
+        const unique = uniqueProcesses(flattened);
+
+        if (unique.length === 0) return new ccs.NullProcess();
+        if (unique.length === 1) return unique[0];
+
+        return new ccs.SummationProcess(unique);
+    }
+
+    dispatchCompositionProcess(process: ccs.CompositionProcess): ccs.Process {
+        const flattened: ccs.Process[] = [];
+
+        for (const p of process.subProcesses) {
+            const r = p.dispatchOn(this);
+
+            if (r instanceof ccs.NullProcess) continue;
+
+            if (r instanceof ccs.CompositionProcess) {
+                flattened.push(...r.subProcesses);
+            } else {
+                flattened.push(r);
+            }
+        }
+
+        if (flattened.length === 0) return new ccs.NullProcess();
+        if (flattened.length === 1) return flattened[0];
+
+        return new ccs.CompositionProcess(flattened);
+    }
+
+    dispatchActionPrefixProcess(process: ccs.ActionPrefixProcess): ccs.Process {
+        const next = process.nextProcess.dispatchOn(this);
+
+        return new ccs.ActionPrefixProcess(process.action, next);
+    }
+
+    dispatchRestrictionProcess(process: ccs.RestrictionProcess): ccs.Process {
+        const sub = process.subProcess.dispatchOn(this);
+
+        if (sub instanceof ccs.NullProcess) {
+            return sub;
+        }
+
+        return new ccs.RestrictionProcess(sub, process.restrictedLabels);
+    }
+
+    dispatchRelabellingProcess(process: ccs.RelabellingProcess): ccs.Process {
+        const sub = process.subProcess.dispatchOn(this);
+
+        if (sub instanceof ccs.NullProcess) {
+            return sub;
+        }
+
+        return new ccs.RelabellingProcess(sub, process.relabellings);
+    }
+    }
+
+    function uniqueProcesses(processes: ccs.Process[]): ccs.Process[] {
+    const seen: { [id: string]: ccs.Process } = {};
+
+    for (let i = 0; i < processes.length; i++) {
+        const p = processes[i];
+        seen[p.id] = p;
+    }
+
+    const result: ccs.Process[] = [];
+
+    for (const k in seen) {
+        if (seen.hasOwnProperty(k)) {
+            result.push(seen[k]);
+        }
+    }
+
+    return result;
+}
 }

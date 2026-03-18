@@ -11,6 +11,17 @@
             "sourceMapPathOverrides": {
                 "../src/*": "${workspaceFolder}/src/*"
             }
+        },
+        {
+            "type": "firefox",
+            "request": "launch",
+            "name": "Debug in Firefox",
+            "url": "http://localhost:8090",
+            "webRoot": "${workspaceFolder}",
+            "sourceMaps": true,
+            "sourceMapPathOverrides": {
+                "../src/*": "${workspaceFolder}/src/*"
+            }
         }
     ]
 }

@@ -253,6 +253,15 @@ module CCS {
         constructor() {
         }
 
+        getProcesses(): Process[]{
+            var proccesses: Process[]  = [];
+            for (const id in this.processes) {
+                proccesses.push(this.processes[id]);
+
+            }
+            return this.processes as unknown as Process[];
+        }
+
         newNamedProcess(processName : string, process : Process) {
             var namedProcess = this.namedProcesses[processName];
             if (!namedProcess) {
@@ -868,7 +877,7 @@ module CCS {
     }
 
     export function getSuccGenerator(graph : Graph, options : any) : SuccessorGenerator {
-        var settings = { inputMode: "CCS", succGen: "strong", reduce: true, time: "timed"},
+        var settings = { inputMode: "CCS", succGen: "strong", reduce: true, time: "timed", noRedundancy: false},
             succGenerator: SuccessorGenerator,
             treeReducer: Traverse.ProcessTreeReducer;
 
@@ -912,6 +921,10 @@ module CCS {
                     succGenerator = new Traverse.UntimedSuccessorGenerator(succGenerator);
                 }
             }
+        }
+
+        if (settings.noRedundancy) {
+            succGenerator = new Traverse.NoRedundancySuccessorGenerator(succGenerator, treeReducer);
         }
 
         return succGenerator;

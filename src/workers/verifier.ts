@@ -33,7 +33,7 @@ messageHandlers.program = data => {
 };
 
 messageHandlers.isStronglyBisimilar = data => {
-    var attackSuccGen = CCS.getSuccGenerator(graph, {inputMode: inputMode, time: data.time, succGen: "strong", reduce: true}),
+    var attackSuccGen = CCS.getSuccGenerator(graph, {inputMode: inputMode, time: data.time, succGen: "strong", reduce: true, noRedundancy: true}),
         defendSuccGen = attackSuccGen,
         leftProcess = attackSuccGen.getProcessByName(data.leftProcess),
         rightProcess = defendSuccGen.getProcessByName(data.rightProcess),
