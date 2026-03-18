@@ -28,7 +28,7 @@ import ccs = CCS;
 import hml = HML;
 
 module Main {
-    declare var Version : string;
+    var Version: string = "0.2.0";
     export var activityHandler = new Activity.ActivityHandler();
     var timer;
 
