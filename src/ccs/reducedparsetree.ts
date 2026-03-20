@@ -142,7 +142,12 @@ module Traverse {
     }
 
     export class AbstractingSuccessorGenerator implements ccs.SuccessorGenerator {
-        
+        getCollapse?: () => Traverse.Collapse;
+
+        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
+            this.getCollapse = getCollapse;
+        }
+
         private abstractions : ccs.Action[];
         public strictSuccGenerator : ccs.SuccessorGenerator;
         public cache;
@@ -282,12 +287,18 @@ module Traverse {
     }
     
     export class WeakSuccessorGenerator extends AbstractingSuccessorGenerator {
+        
         constructor(strictSuccGenerator : ccs.SuccessorGenerator, cache?) {
             super([new ccs.Action("tau", false)], strictSuccGenerator, cache);
         }
     }
 
     export class ReducingSuccessorGenerator implements ccs.SuccessorGenerator {
+        getCollapse?: () => Traverse.Collapse;
+
+        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
+            this.getCollapse = getCollapse;
+        }
 
         constructor(public succGenerator : ccs.SuccessorGenerator, public reducer : ProcessTreeReducer) { }
 
@@ -320,6 +331,11 @@ module Traverse {
     }
 
     export class NoRedundancySuccessorGenerator implements ccs.SuccessorGenerator {
+        getCollapse?: () => Traverse.Collapse;    
+
+        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
+            this.getCollapse = getCollapse;
+        }
 
         constructor(public succGenerator : ccs.SuccessorGenerator, public reducer : ProcessTreeReducer) {}
 
@@ -337,6 +353,20 @@ module Traverse {
             return this.reducer.visit(proc);
         }
 
+        getCollapseNormalForm(): [ccs.Process, ccs.Process][] {
+            if (this.getCollapse === undefined) {
+                return [];
+            }
+            const bisimilarityCollapse: Traverse.Collapse = this.getCollapse();
+
+            const processes = this.getGraph().getProcesses();
+            processes.forEach(process => {
+                const collapse = bisimilarityCollapse.getRepresentative(process.id);
+                console.log(`Process ${process.id} has collapse ${collapse.id}`); //TODO: Remove this log after debugging
+            });
+            return [];
+        }
+
         getNormalFormFromProcess(process: ccs.Process) : ccs.Process {
             var getSubProcessesInNormalForm = (process: ccs.Process) => {
                 var newSubProcesses: ccs.Process[] = [];
@@ -345,7 +375,7 @@ module Traverse {
                     // Change all subprocesses to normal form
                     process.subProcesses.forEach((subProcess) => {
                         var normalFormSubProcess = this.getNormalFormFromProcess(subProcess);
-                        newSubProcesses.concat(normalFormSubProcess);
+                        newSubProcesses.push(normalFormSubProcess);
                     });
                 }
                 return newSubProcesses;
@@ -356,21 +386,22 @@ module Traverse {
                 // Change all subprocesses to normal form
                 var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
 
-                //Clean from nil and repeated processes
                 var newSubProcesses: ccs.Process[] = [];
                 normalFormSubprocesses.forEach(subProcess => {
+                    // Clean from nil processes
                     if (subProcess instanceof ccs.NullProcess) {
                         return;
                     }
+                    // Clean from repeated processes
                     else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
                         return;
                     }
                     else {
                         // If not nil or repeated, add
-                        newSubProcesses.concat(subProcess);
+                        newSubProcesses.push(subProcess);
                     }
                 });
-                // Overwrite ordered subprocesses
+                // Overwrite with ordered subprocesses
                 newSubProcesses.sort();
                 normalFormProcess = new ccs.SummationProcess(newSubProcesses);
             }
@@ -381,21 +412,22 @@ module Traverse {
                 // Change all subprocesses to normal form
                 var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
 
-                //Clean from nil processes
                 var newSubProcesses: ccs.Process[] = [];
                 normalFormSubprocesses.forEach(subProcess => {
+                    // Clean from nil processes
                     if (subProcess instanceof ccs.NullProcess) {
                         return;
                     }
+                    /// Clean from repeated processes
                     else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
                         return;
                     }
                     else {
                         // If not nil or repeated, add
-                        newSubProcesses.concat(subProcess);
+                        newSubProcesses.push(subProcess);
                     }
                 });
-                // Overwrite ordered subprocesses
+                // Overwrite with ordered subprocesses
                 newSubProcesses.sort();
                 normalFormProcess = new ccs.SummationProcess(newSubProcesses);
             }
@@ -408,6 +440,9 @@ module Traverse {
                 normalFormProcess = new ccs.RestrictionProcess(getSubProcessesInNormalForm(process)[0], process.restrictedLabels);
             }
             else if (process instanceof ccs.NamedProcess) {
+                // 🙏🙏 Nothing to rewrite
+            }
+            else if (process instanceof ccs.NullProcess) {
                 // 🙏🙏 Nothing to rewrite
             }
 
@@ -424,6 +459,7 @@ module Traverse {
                 const targetProcess = this.getNormalFormFromProcess(transition.targetProcess);
                 for (const processId in processes) {
                     const process = this.succGenerator.getProcessById(processId);
+                    const collapse = this.getCollapseNormalForm();
                     if (targetProcess == this.getNormalFormFromProcess(process)) {
                         return;
                     }

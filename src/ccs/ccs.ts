@@ -36,7 +36,8 @@ module CCS {
         getGraph() : Graph;
         getProcessByName(processName : string) : Process;
         getProcessById(processId : ProcessId) : Process;
-        getSuccessors(processId : ProcessId) : TransitionSet;
+        getSuccessors(processId: ProcessId): TransitionSet;
+        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) : void;
     }
     
     /*
@@ -712,6 +713,11 @@ module CCS {
     }
 
     export class StrictSuccessorGenerator implements SuccessorGenerator, ProcessDispatchHandler<TransitionSet> {
+        getCollapse?: () => Traverse.Collapse;
+
+        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
+            this.getCollapse = getCollapse;
+        }
 
         constructor(public graph : Graph, public cache?) {
             this.cache = cache || {};

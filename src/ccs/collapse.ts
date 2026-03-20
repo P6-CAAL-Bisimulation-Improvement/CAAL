@@ -13,6 +13,11 @@ module Traverse {
     // replaced many equivalent processes.
     // is not a real process. Has no id.
     export class CollapsingSuccessorGenerator implements ccs.SuccessorGenerator {
+        getCollapse?: () => Traverse.Collapse;
+
+        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
+            this.getCollapse = getCollapse;
+        }
 
         private cache = {};
 
