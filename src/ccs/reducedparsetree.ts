@@ -414,23 +414,24 @@ module Traverse {
             // Return changed process
             return normalFormProcess;
         }
-
+        
         getSuccessors(processId : ccs.ProcessId) : ccs.TransitionSet {
             var successors = new ccs.TransitionSet();
             var transitions: ccs.TransitionSet = this.succGenerator.getSuccessors(processId);
             // For each possible transition from the process, check if normal form of targets is redundant
             transitions.forEach((transition) => {
-                this.getGraph().getProcesses().forEach(process => {
+                const proccesses = this.getGraph().getProcesses();
+                for (let i = 0; i < proccesses.length; i++) {
+                    const process = proccesses[i];
                     if (this.getNormalFormFromProcess(transition.targetProcess) == this.getNormalFormFromProcess(process)) {
                         return;
                     }
                     else {
                         successors.add(transition)
                     }
-                });
+                }
             });
             // If not, add it
-            
             return successors;
         }
     }
