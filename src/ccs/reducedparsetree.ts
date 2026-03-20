@@ -420,10 +420,11 @@ module Traverse {
             var transitions: ccs.TransitionSet = this.succGenerator.getSuccessors(processId);
             // For each possible transition from the process, check if normal form of targets is redundant
             transitions.forEach((transition) => {
-                const proccesses = this.getGraph().getProcesses();
-                for (let i = 0; i < proccesses.length; i++) {
-                    const process = proccesses[i];
-                    if (this.getNormalFormFromProcess(transition.targetProcess) == this.getNormalFormFromProcess(process)) {
+                const processes = this.getGraph().getProcesses();
+                const targetProcess = this.getNormalFormFromProcess(transition.targetProcess);
+                for (const processId in processes) {
+                    const process = this.succGenerator.getProcessById(processId);
+                    if (targetProcess == this.getNormalFormFromProcess(process)) {
                         return;
                     }
                     else {
