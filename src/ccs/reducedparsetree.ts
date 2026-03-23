@@ -353,55 +353,47 @@ module Traverse {
             return this.reducer.visit(proc);
         }
 
-        getCollapseNormalForm(): [ccs.Process, ccs.Process][] {
-            if (this.getCollapse === undefined) {
-                return [];
-            }
-            const bisimilarityCollapse: Traverse.Collapse = this.getCollapse();
-
-            const processes = this.getGraph().getProcesses();
-            processes.forEach(process => {
-                const collapse = bisimilarityCollapse.getRepresentative(process.id);
-                console.log(`Process ${process.id} has collapse ${collapse.id}`); //TODO: Remove this log after debugging
-            });
-            return [];
-        }
-
-        getNormalFormFromProcess(process: ccs.Process) : ccs.Process {
-            var getSubProcessesInNormalForm = (process: ccs.Process) => {
+        getNormalFormFromProcess(process: ccs.Process): ccs.Process {
+            var getSubProcessesInNormalForm = <T extends { subProcesses: ccs.Process[] }>(process: T) => {
                 var newSubProcesses: ccs.Process[] = [];
 
-                if (process instanceof ccs.SummationProcess || process instanceof ccs.CompositionProcess) {
-                    // Change all subprocesses to normal form
-                    process.subProcesses.forEach((subProcess) => {
-                        var normalFormSubProcess = this.getNormalFormFromProcess(subProcess);
-                        newSubProcesses.push(normalFormSubProcess);
-                    });
-                }
+                // Change all subprocesses to normal form
+                process.subProcesses.forEach((subProcess) => {
+                    var normalFormSubProcess = this.getNormalFormFromProcess(subProcess);
+                    newSubProcesses.push(normalFormSubProcess);
+                });
+                
                 return newSubProcesses;
             };
 
             var normalFormProcess: ccs.Process = process;
             if (process instanceof ccs.SummationProcess) {
-                // Change all subprocesses to normal form
                 var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
 
                 var newSubProcesses: ccs.Process[] = [];
                 normalFormSubprocesses.forEach(subProcess => {
-                    // Clean from nil processes
+                    // Null element: P + 0 => P
                     if (subProcess instanceof ccs.NullProcess) {
                         return;
                     }
-                    // Clean from repeated processes
+                    // Flatten: P + (Q + R) => P + Q + R
+                    else if (subProcess instanceof ccs.SummationProcess) {
+                        subProcess.subProcesses.forEach(nested => {
+                            // Idempotence: P + P => P, also for nested processes
+                            if (newSubProcesses.indexOf(nested) === -1) {
+                                newSubProcesses.push(nested);
+                            }
+                        });
+                    }
+                    // Idempotence: P + P => P
                     else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
                         return;
                     }
                     else {
-                        // If not nil or repeated, add
                         newSubProcesses.push(subProcess);
                     }
                 });
-                // Overwrite with ordered subprocesses
+                // Symmetry: P + Q => Q + P, order by id
                 newSubProcesses.sort();
                 normalFormProcess = new ccs.SummationProcess(newSubProcesses);
             }
@@ -409,35 +401,36 @@ module Traverse {
                 normalFormProcess = new ccs.ActionPrefixProcess(process.action, this.getNormalFormFromProcess(process.nextProcess));
             }
             else if (process instanceof ccs.CompositionProcess) {
-                // Change all subprocesses to normal form
                 var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
 
                 var newSubProcesses: ccs.Process[] = [];
                 normalFormSubprocesses.forEach(subProcess => {
-                    // Clean from nil processes
+                    // Null element: P | 0 => P
                     if (subProcess instanceof ccs.NullProcess) {
                         return;
                     }
-                    /// Clean from repeated processes
-                    else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
-                        return;
+                    // Flatten: P | (Q | R) => P | Q | R
+                    else if (subProcess instanceof ccs.CompositionProcess) {
+                        subProcess.subProcesses.forEach(nested => {
+                            newSubProcesses.push(nested);
+                        });
                     }
+                    // Idempotence is not valid when compositions synchronize
                     else {
-                        // If not nil or repeated, add
                         newSubProcesses.push(subProcess);
                     }
                 });
-                // Overwrite with ordered subprocesses
+                // Symmetry: P | Q => Q | P, order by id
                 newSubProcesses.sort();
                 normalFormProcess = new ccs.SummationProcess(newSubProcesses);
             }
             else if (process instanceof ccs.RelabellingProcess) {
                 // TODO: Take a deeper look at this later
-                normalFormProcess = new ccs.RelabellingProcess(getSubProcessesInNormalForm(process)[0], process.relabellings);
+                normalFormProcess = new ccs.RelabellingProcess(this.getNormalFormFromProcess(process), process.relabellings);
             }
             else if (process instanceof ccs.RestrictionProcess) {
                 // TODO: Take a deeper look at this later
-                normalFormProcess = new ccs.RestrictionProcess(getSubProcessesInNormalForm(process)[0], process.restrictedLabels);
+                normalFormProcess = new ccs.RestrictionProcess(this.getNormalFormFromProcess(process), process.restrictedLabels);
             }
             else if (process instanceof ccs.NamedProcess) {
                 // 🙏🙏 Nothing to rewrite
@@ -446,29 +439,17 @@ module Traverse {
                 // 🙏🙏 Nothing to rewrite
             }
 
-            // Return changed process
             return normalFormProcess;
         }
         
         getSuccessors(processId : ccs.ProcessId) : ccs.TransitionSet {
             var successors = new ccs.TransitionSet();
             var transitions: ccs.TransitionSet = this.succGenerator.getSuccessors(processId);
-            // For each possible transition from the process, check if normal form of targets is redundant
+            // For each possible transition from the process, get normal form
             transitions.forEach((transition) => {
-                const processes = this.getGraph().getProcesses();
-                const targetProcess = this.getNormalFormFromProcess(transition.targetProcess);
-                for (const processId in processes) {
-                    const process = this.succGenerator.getProcessById(processId);
-                    const collapse = this.getCollapseNormalForm();
-                    if (targetProcess == this.getNormalFormFromProcess(process)) {
-                        return;
-                    }
-                    else {
-                        successors.add(transition)
-                    }
-                }
+                const normalFormTargetProcess = this.getNormalFormFromProcess(transition.targetProcess);
+                successors.add(new ccs.Transition(transition.action, normalFormTargetProcess));
             });
-            // If not, add it
             return successors;
         }
     }
