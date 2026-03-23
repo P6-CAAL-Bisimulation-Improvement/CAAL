@@ -142,12 +142,6 @@ module Traverse {
     }
 
     export class AbstractingSuccessorGenerator implements ccs.SuccessorGenerator {
-        getCollapse?: () => Traverse.Collapse;
-
-        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
-            this.getCollapse = getCollapse;
-        }
-
         private abstractions : ccs.Action[];
         public strictSuccGenerator : ccs.SuccessorGenerator;
         public cache;
@@ -294,12 +288,6 @@ module Traverse {
     }
 
     export class ReducingSuccessorGenerator implements ccs.SuccessorGenerator {
-        getCollapse?: () => Traverse.Collapse;
-
-        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
-            this.getCollapse = getCollapse;
-        }
-
         constructor(public succGenerator : ccs.SuccessorGenerator, public reducer : ProcessTreeReducer) { }
 
         getGraph() {

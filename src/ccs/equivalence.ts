@@ -33,9 +33,6 @@ module Equivalence {
             leftNode: ccs.ProcessId, rightNode: ccs.ProcessId) {
             this.constructData[0] = [0, leftNode, rightNode];
             this.nextIdx = 1;
-
-            attackSuccGen.setBisimilarityCollapse(this.getCollapse.bind(this));
-            defendSuccGen.setBisimilarityCollapse(this.getCollapse.bind(this));
         }
 
         getCollapse(): Traverse.Collapse {
