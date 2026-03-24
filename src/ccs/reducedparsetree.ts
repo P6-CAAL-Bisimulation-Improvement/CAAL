@@ -319,12 +319,6 @@ module Traverse {
     }
 
     export class NoRedundancySuccessorGenerator implements ccs.SuccessorGenerator {
-        getCollapse?: () => Traverse.Collapse;    
-
-        setBisimilarityCollapse(getCollapse: () => Traverse.Collapse) {
-            this.getCollapse = getCollapse;
-        }
-
         constructor(public succGenerator : ccs.SuccessorGenerator, public reducer : ProcessTreeReducer) {}
 
         getGraph() {
