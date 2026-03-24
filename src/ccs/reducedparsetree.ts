@@ -358,18 +358,15 @@ module Traverse {
                     if (subProcess instanceof ccs.NullProcess) {
                         return;
                     }
-                    // Flatten: P + (Q + R) => P + Q + R
-                    else if (subProcess instanceof ccs.SummationProcess) {
-                        subProcess.subProcesses.forEach(nested => {
-                            // Idempotence: P + P => P, also for nested processes
-                            if (newSubProcesses.indexOf(nested) === -1) {
-                                newSubProcesses.push(nested);
-                            }
-                        });
-                    }
                     // Idempotence: P + P => P
                     else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
                         return;
+                    }
+                    // Flatten: P + (Q + R) => P + Q + R
+                    else if (subProcess instanceof ccs.SummationProcess) {
+                        subProcess.subProcesses.forEach(nested => {
+                            newSubProcesses.push(nested);
+                        });
                     }
                     else {
                         newSubProcesses.push(subProcess);
@@ -391,20 +388,20 @@ module Traverse {
                     if (subProcess instanceof ccs.NullProcess) {
                         return;
                     }
+                    // Idempotence is not valid when compositions can synchronize
                     // Flatten: P | (Q | R) => P | Q | R
                     else if (subProcess instanceof ccs.CompositionProcess) {
                         subProcess.subProcesses.forEach(nested => {
                             newSubProcesses.push(nested);
                         });
                     }
-                    // Idempotence is not valid when compositions synchronize
                     else {
                         newSubProcesses.push(subProcess);
                     }
                 });
                 // Symmetry: P | Q => Q | P, order by id
                 newSubProcesses.sort();
-                normalFormProcess = new ccs.SummationProcess(newSubProcesses);
+                normalFormProcess = new ccs.CompositionProcess(newSubProcesses);
             }
             else if (process instanceof ccs.RelabellingProcess) {
                 // TODO: Take a deeper look at this later
