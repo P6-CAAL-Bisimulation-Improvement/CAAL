@@ -123,10 +123,16 @@ module Equivalence {
         getContextCandidate(process: ccs.Process, hole: ccs.Process): ccs.Process[] {
             const seen: string[] = [];
             const results: ccs.Process[] = [];
+            var holeId = hole.id;
+
+            if (hole instanceof ccs.NamedProcess) {
+                holeId = hole.subProcess.id;
+            }
 
             function collect(node: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): void {
 
-                if (node.id == hole.id) {
+                // TODO: If the process and the hole is the same type either Composition or Summation, then it is not enough to check if the processes are the same, as we need to check that the hole is a subset of the process we are looking at
+                if (node.id == holeId) {
                     const ctx: ccs.Process = rebuild(new ccs.HoleProcess());
                     const key: string = ctx.toString();
                     if (seen.indexOf(key) == -1) {
