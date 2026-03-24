@@ -81,6 +81,137 @@ module Equivalence {
             return result;
         }
 
+        getAllBisimilarProcessPairs(): [ccs.Process, ccs.Process][] {
+            var result: [ccs.Process, ccs.Process][] = [];
+            for (var i = 0; i < this.nextIdx; i++) {
+                // If pair, then save
+                if (this.constructData[i][0] === 0) {
+                    const [leftId, rightId] = [this.constructData[i][1], this.constructData[i][2]];
+                    const [leftProcess, rightProcess] = [this.attackSuccGen.getProcessById(leftId), this.attackSuccGen.getProcessById(rightId)];
+                    result.push([leftProcess, rightProcess]);
+                }
+            }
+            return result;
+        }
+
+        getLeftContextCandidates(leftProcess: ccs.Process, bisimilarProcessPairs: [ccs.Process, ccs.Process][]): [ccs.Process, [ccs.Process, ccs.Process]][] {
+            var result: [ccs.Process, [ccs.Process, ccs.Process]][] = [];
+
+            // 1. Get all contexts of leftProcess with a hole, which is bisimilar to the first process in the bisimilarProcessPair
+            bisimilarProcessPairs.forEach((bisimilarProcessPair) => {
+                this.getContextCandidate(leftProcess, bisimilarProcessPair[0]).forEach(contextCandidate => {
+                    result.push([contextCandidate, bisimilarProcessPair]);
+                });
+            });
+
+            return result;
+        }
+
+        getRightContextCandidates(rightProcess: ccs.Process, bisimilarProcessPairs: [ccs.Process, ccs.Process][]): [ccs.Process, [ccs.Process, ccs.Process]][] {
+            var result: [ccs.Process, [ccs.Process, ccs.Process]][] = [];
+
+            // 1. Get all contexts of rightProcess with a hole, which is bisimilar to the second process in the bisimilarProcessPair
+            bisimilarProcessPairs.forEach((bisimilarProcessPair) => {
+                this.getContextCandidate(rightProcess, bisimilarProcessPair[1]).forEach(contextCandidate => {
+                    result.push([contextCandidate, bisimilarProcessPair]);
+                });
+            });
+
+            return result;
+        }
+
+        getContextCandidate(process: ccs.Process, hole: ccs.Process): ccs.Process[] {
+            const seen: string[] = [];
+            const results: ccs.Process[] = [];
+
+            function collect(node: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): void {
+
+                if (node.id == hole.id) {
+                    const ctx: ccs.Process = rebuild(new ccs.HoleProcess());
+                    const key: string = ctx.toString();
+                    if (seen.indexOf(key) == -1) {
+                        seen.push(key);
+                        results.push(ctx);
+                    }
+                }
+
+                node.dispatchOn<void>({
+                    dispatchNullProcess(n: ccs.NullProcess): void { },
+
+                    dispatchNamedProcess(n: ccs.NamedProcess): void {
+                        collect(n.subProcess, hole =>
+                            rebuild(new ccs.NamedProcess(n.name, hole))
+                        );
+                    },
+
+                    dispatchSummationProcess(n: ccs.SummationProcess): void {
+                        for (let i = 0; i < n.subProcesses.length; i++) {
+                            collect(n.subProcesses[i], hole => {
+                                const next: ccs.Process[] = n.subProcesses.slice();
+                                next[i] = hole;
+                                return rebuild(new ccs.SummationProcess(next));
+                            });
+                        }
+                    },
+
+                    dispatchCompositionProcess(n: ccs.CompositionProcess): void {
+                        for (let i = 0; i < n.subProcesses.length; i++) {
+                            collect(n.subProcesses[i], hole => {
+                                const next: ccs.Process[] = n.subProcesses.slice();
+                                next[i] = hole;
+                                return rebuild(new ccs.CompositionProcess(next));
+                            });
+                        }
+                    },
+
+                    dispatchActionPrefixProcess(n: ccs.ActionPrefixProcess): void {
+                        collect(n.nextProcess, hole =>
+                            rebuild(new ccs.ActionPrefixProcess(n.action, hole))
+                        );
+                    },
+
+                    dispatchRestrictionProcess(n: ccs.RestrictionProcess): void {
+                        collect(n.subProcess, hole =>
+                            rebuild(new ccs.RestrictionProcess(hole, n.restrictedLabels))
+                        );
+                    },
+
+                    dispatchRelabellingProcess(n: ccs.RelabellingProcess): void {
+                        collect(n.subProcess, hole =>
+                            rebuild(new ccs.RelabellingProcess(hole, n.relabellings))
+                        );
+                    },
+                });
+            }
+
+            collect(process, x => x);
+            return results;
+        }
+
+        isBisimilarUpToContext(leftProcess: ccs.Process, rightProcess: ccs.Process): boolean {
+            // 1. Get possible pairs of holes for context candidates, which is each bisimilar process pair
+            const bisimilarProcessPairs = this.getAllBisimilarProcessPairs();
+
+            // 2. Find the resulting context candidates of each pair of holes
+            const leftContexts = this.getLeftContextCandidates(leftProcess, bisimilarProcessPairs);
+            const rightContexts = this.getRightContextCandidates(rightProcess, bisimilarProcessPairs);
+
+            // 3. If matching context candidates are found, using the same bisimilar process pair, then the processes are bisimilar up to context.
+            leftContexts.forEach(leftContext => {
+                rightContexts.forEach(rightContext => {
+                    const hasSameProcessPair: boolean = leftContext[1] === rightContext[1];
+                    if (hasSameProcessPair) {
+                        const hasSameContext = leftContext[0].id === rightContext[0].id;
+                        if (hasSameContext) {
+                            return true;
+                        }
+                    }
+                });
+            });
+
+            return false;
+        }
+
         private getNodeForLeftTransition(data) {
             var action = data[1],
                 toLeftId = data[2],
@@ -89,12 +220,16 @@ module Equivalence {
             // for (s, fromRightId), s ----action---> toLeftId.
             // fromRightId must be able to match.
             var rightTransitions = this.defendSuccGen.getSuccessors(fromRightId);
+
             rightTransitions.forEach(rightTransition => {
                 var existing, toRightId;
                 //Same action - possible candidate.
                 if (rightTransition.action.equals(action)) {
-                    toRightId = rightTransition.targetProcess.id;
-                    result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                    const leftProcess = this.defendSuccGen.getProcessById(toLeftId);
+                    if (this.isBisimilarUpToContext(leftProcess, rightTransition.targetProcess) == false) {
+                        toRightId = rightTransition.targetProcess.id;
+                        result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                    }
                 }
             });
             return [result];
@@ -110,8 +245,11 @@ module Equivalence {
             leftTransitions.forEach(leftTransition => {
                 var existing, toLeftId;
                 if (leftTransition.action.equals(action)) {
-                    toLeftId = leftTransition.targetProcess.id;
-                    result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                    const rightProcess = this.defendSuccGen.getProcessById(toRightId);
+                    if (this.isBisimilarUpToContext(leftTransition.targetProcess, rightProcess) == false) {
+                        toLeftId = leftTransition.targetProcess.id;
+                        result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                    }
                 }
             });
             return [result];

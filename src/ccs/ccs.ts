@@ -24,6 +24,10 @@ module CCS {
         dispatchCollapsedProcess(process : CollapsedProcess, ... args) : T
     }
 
+    export interface HoleDispatchHandler<T> extends ProcessDispatchHandler<T> {
+        dispatchHoleProcess(process : HoleProcess, ... args) : T
+    }
+
     export interface CollapsedDispatchHandler<T> extends ProcessDispatchHandler<T> {
         dispatchCollapsedProcess(process : CollapsedProcess, ... args) : T
     }
@@ -166,7 +170,7 @@ module CCS {
     }
 
     export class CollapsedProcess implements Process {
-        private ccs : string;
+        private ccs: string;
         constructor(public subProcesses : Process[]) {
         }
         dispatchOn<T>(dispatcher : CollapsedDispatchHandler<T>) : T {
@@ -176,6 +180,26 @@ module CCS {
             if (this.ccs) return this.ccs;
             return this.ccs = "{" + this.subProcesses.map(p => "(" + p.toString() + ")").join(",") + "}";
         }
+        get id() {
+            return this.toString();
+        }
+    }
+
+    export class HoleProcess implements Process {
+        private ccs: string | undefined;
+
+        constructor() {
+        }
+
+        dispatchOn<T>(dispatcher : HoleDispatchHandler<T>) : T {
+            return dispatcher.dispatchHoleProcess(this);
+        }
+
+        toString() {
+            if (this.ccs) return this.ccs;
+            return this.ccs = "[.]";
+        }
+
         get id() {
             return this.toString();
         }
