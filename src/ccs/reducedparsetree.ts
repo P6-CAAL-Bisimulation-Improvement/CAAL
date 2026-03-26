@@ -336,7 +336,7 @@ module Traverse {
         }
 
         getNormalFormFromProcess(process: ccs.Process): ccs.Process {
-            var getSubProcessesInNormalForm = <T extends { subProcesses: ccs.Process[] }>(process: T) => {
+            const getSubProcessesInNormalForm = <T extends { subProcesses: ccs.Process[] }>(process: T) => {
                 var newSubProcesses: ccs.Process[] = [];
 
                 // Change all subprocesses to normal form

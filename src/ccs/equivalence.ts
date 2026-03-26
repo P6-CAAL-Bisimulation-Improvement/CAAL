@@ -121,17 +121,7 @@ module Equivalence {
         }
 
         getHoleInProcess(process: ccs.Process, hole: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): ccs.Process | undefined {
-            // TODO: If the process and the hole is the same type either Composition or Summation, then it is not enough to check if the processes are the same, as we need to check that the hole is a subset of the process we are looking at
-            /*
-            proc A,B,C,D
-            hole B,C
-            
-            b != A
-                so new = [B]
-            
-
-            */ 
-            if (process instanceof ccs.CompositionProcess && hole instanceof ccs.CompositionProcess) {
+            const getHoleInProcessWithSubProcesses = <T extends { subProcesses: ccs.Process[] }>(process: T, hole: T) => {
                 var resultingSubProcesses: ccs.Process[] = [];
 
                 // Loops without increments in definitions
@@ -162,8 +152,12 @@ module Equivalence {
                 resultingSubProcesses.push(new ccs.HoleProcess());
                 return rebuild(new ccs.CompositionProcess(resultingSubProcesses));
             }
+
+            if (process instanceof ccs.CompositionProcess && hole instanceof ccs.CompositionProcess) {
+                return getHoleInProcessWithSubProcesses(process, hole);
+            }
             else if (process instanceof ccs.SummationProcess && hole instanceof ccs.SummationProcess) {
-                               
+                return getHoleInProcessWithSubProcesses(process, hole);         
             }
 
             if (process.id == hole.id) {
