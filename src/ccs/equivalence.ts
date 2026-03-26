@@ -176,10 +176,9 @@ module Equivalence {
         getContextCandidate(process: ccs.Process, hole: ccs.Process): ccs.Process[] {
             const seen: string[] = [];
             const results: ccs.Process[] = [];
-            const self = this;
             
-            function getContextCandidatesRecursively(node: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): void {
-                const ctxCandidate = self.getHoleInProcess(node, hole, rebuild);
+            const getContextCandidatesRecursively = (node: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): void => {
+                const ctxCandidate = this.getHoleInProcess(node, hole, rebuild);
 
                 if (ctxCandidate) {
                     const key: string = ctxCandidate.id;
@@ -237,6 +236,7 @@ module Equivalence {
                     },
                 });
             }
+            getContextCandidatesRecursively.bind(this);
 
             getContextCandidatesRecursively(process, x => x);
             return results;
