@@ -122,9 +122,45 @@ module Equivalence {
 
         getHoleInProcess(process: ccs.Process, hole: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): ccs.Process | undefined {
             // TODO: If the process and the hole is the same type either Composition or Summation, then it is not enough to check if the processes are the same, as we need to check that the hole is a subset of the process we are looking at
+            /*
+            proc A,B,C,D
+            hole B,C
+            
+            b != A
+                so new = [B]
+            
 
+            */ 
             if (process instanceof ccs.CompositionProcess && hole instanceof ccs.CompositionProcess) {
+                var resultingSubProcesses: ccs.Process[] = [];
+
+                // Loops without increments in definitions
+                var holeIndex = 0, processIndex = 0;
+                while (holeIndex < hole.subProcesses.length) {
+                    while (processIndex < process.subProcesses.length) {
+                        if (process.subProcesses[processIndex].id == hole.subProcesses[holeIndex].id) {
+                            // If the current sub process is in the hole, then we go to the next sub processes for both hole and process
+                            holeIndex++;
+                            processIndex++;
+                        }
+                        else {
+                            // Else we check the next sub process of the process
+                            processIndex++;
+                            resultingSubProcesses.push(process.subProcesses[processIndex]);
+                        }
+                        
+                    }
+                    // If we still have sub process in hole, then it is not a subset of the process, so we return undefined
+                    return undefined;
+                }
+                // Go through the rest of the sub processes of the process, since we exited because the hole was looped through, and add them to the resulting sub processes
+                while (processIndex < process.subProcesses.length) {
+                    processIndex++;
+                    resultingSubProcesses.push(process.subProcesses[processIndex]);
+                }
                 
+                resultingSubProcesses.push(new ccs.HoleProcess());
+                return rebuild(new ccs.CompositionProcess(resultingSubProcesses));
             }
             else if (process instanceof ccs.SummationProcess && hole instanceof ccs.SummationProcess) {
                                
