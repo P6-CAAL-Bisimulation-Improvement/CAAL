@@ -120,24 +120,36 @@ module Equivalence {
             return result;
         }
 
+        getHoleInProcess(process: ccs.Process, hole: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): ccs.Process | undefined {
+            // TODO: If the process and the hole is the same type either Composition or Summation, then it is not enough to check if the processes are the same, as we need to check that the hole is a subset of the process we are looking at
+
+            if (process instanceof ccs.CompositionProcess && hole instanceof ccs.CompositionProcess) {
+                
+            }
+            else if (process instanceof ccs.SummationProcess && hole instanceof ccs.SummationProcess) {
+                               
+            }
+
+            if (process.id == hole.id) {
+                const ctx: ccs.Process = rebuild(new ccs.HoleProcess());
+                return ctx;
+            }
+
+        }
+
         getContextCandidate(process: ccs.Process, hole: ccs.Process): ccs.Process[] {
             const seen: string[] = [];
             const results: ccs.Process[] = [];
-            var holeId = hole.id;
+            const self = this;
+            
+            function getContextCandidatesRecursively(node: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): void {
+                const ctxCandidate = self.getHoleInProcess(node, hole, rebuild);
 
-            if (hole instanceof ccs.NamedProcess) {
-                holeId = hole.subProcess.id;
-            }
-
-            function collect(node: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): void {
-
-                // TODO: If the process and the hole is the same type either Composition or Summation, then it is not enough to check if the processes are the same, as we need to check that the hole is a subset of the process we are looking at
-                if (node.id == holeId) {
-                    const ctx: ccs.Process = rebuild(new ccs.HoleProcess());
-                    const key: string = ctx.toString();
+                if (ctxCandidate) {
+                    const key: string = ctxCandidate.id;
                     if (seen.indexOf(key) == -1) {
                         seen.push(key);
-                        results.push(ctx);
+                        results.push(ctxCandidate);
                     }
                 }
 
@@ -145,14 +157,14 @@ module Equivalence {
                     dispatchNullProcess(n: ccs.NullProcess): void { },
 
                     dispatchNamedProcess(n: ccs.NamedProcess): void {
-                        collect(n.subProcess, hole =>
-                            rebuild(new ccs.NamedProcess(n.name, hole))
-                        );
+                        getContextCandidatesRecursively(n.subProcess, hole => {
+                            return rebuild(new ccs.NamedProcess(n.name, hole));
+                        });
                     },
 
                     dispatchSummationProcess(n: ccs.SummationProcess): void {
                         for (let i = 0; i < n.subProcesses.length; i++) {
-                            collect(n.subProcesses[i], hole => {
+                            getContextCandidatesRecursively(n.subProcesses[i], hole => {
                                 const next: ccs.Process[] = n.subProcesses.slice();
                                 next[i] = hole;
                                 return rebuild(new ccs.SummationProcess(next));
@@ -162,7 +174,7 @@ module Equivalence {
 
                     dispatchCompositionProcess(n: ccs.CompositionProcess): void {
                         for (let i = 0; i < n.subProcesses.length; i++) {
-                            collect(n.subProcesses[i], hole => {
+                            getContextCandidatesRecursively(n.subProcesses[i], hole => {
                                 const next: ccs.Process[] = n.subProcesses.slice();
                                 next[i] = hole;
                                 return rebuild(new ccs.CompositionProcess(next));
@@ -171,26 +183,26 @@ module Equivalence {
                     },
 
                     dispatchActionPrefixProcess(n: ccs.ActionPrefixProcess): void {
-                        collect(n.nextProcess, hole =>
+                        getContextCandidatesRecursively(n.nextProcess, hole =>
                             rebuild(new ccs.ActionPrefixProcess(n.action, hole))
                         );
                     },
 
                     dispatchRestrictionProcess(n: ccs.RestrictionProcess): void {
-                        collect(n.subProcess, hole =>
+                        getContextCandidatesRecursively(n.subProcess, hole =>
                             rebuild(new ccs.RestrictionProcess(hole, n.restrictedLabels))
                         );
                     },
 
                     dispatchRelabellingProcess(n: ccs.RelabellingProcess): void {
-                        collect(n.subProcess, hole =>
+                        getContextCandidatesRecursively(n.subProcess, hole =>
                             rebuild(new ccs.RelabellingProcess(hole, n.relabellings))
                         );
                     },
                 });
             }
 
-            collect(process, x => x);
+            getContextCandidatesRecursively(process, x => x);
             return results;
         }
 
