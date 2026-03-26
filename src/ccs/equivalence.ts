@@ -121,44 +121,61 @@ module Equivalence {
         }
 
         getHoleInProcess(process: ccs.Process, hole: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): ccs.Process | undefined {
+            var result: ccs.Process | undefined = undefined;
+
             const getHoleInProcessWithSubProcesses = <T extends { subProcesses: ccs.Process[] }>(process: T, hole: T) => {
                 var resultingSubProcesses: ccs.Process[] = [];
                 var holeIndex = 0;
 
                 for (let processIndex = 0; processIndex < process.subProcesses.length; processIndex++) {
-                    if (process.subProcesses[processIndex].id == hole.subProcesses[holeIndex].id) {
-                        // If the current sub process is in the hole, then we go to the next sub processes for both hole and process
+                    // If the hole is found but there are still sub processes in the process
+                    if (holeIndex >= hole.subProcesses.length) {
+                        resultingSubProcesses.push(process.subProcesses[processIndex]);
+                    }
+                    // If the current sub process is in the hole, then we go to the next sub processes for both hole and process
+                    else if (process.subProcesses[processIndex].id == hole.subProcesses[holeIndex].id) {
                         holeIndex++;
                     }
+                    // Else we check the next sub process of the process
                     else {
-                        // Else we check the next sub process of the process
                         resultingSubProcesses.push(process.subProcesses[processIndex]);
                     }
                 }
 
+                // Entire hole is not found in process, thus we cannot find a context
                 if (holeIndex < hole.subProcesses.length) {
-                    // Entire hole is not found in process, thus we cannot find a context
                     return undefined;
                 }
                 
                 resultingSubProcesses.push(new ccs.HoleProcess());
                 resultingSubProcesses.sort();
                 // Return sorted contex with hole
-                return rebuild(new ccs.CompositionProcess(resultingSubProcesses));
+                return resultingSubProcesses;
+            }
+
+            if (process instanceof ccs.NamedProcess) {
+                process = process.subProcess;
+            }
+            if (hole instanceof ccs.NamedProcess) {
+                hole = hole.subProcess;
             }
 
             if (process instanceof ccs.CompositionProcess && hole instanceof ccs.CompositionProcess) {
-                return getHoleInProcessWithSubProcesses(process, hole);
+                const subProcesses = getHoleInProcessWithSubProcesses(process, hole);
+                if (subProcesses) {
+                    return rebuild(new ccs.CompositionProcess(subProcesses));
+                }
             }
             else if (process instanceof ccs.SummationProcess && hole instanceof ccs.SummationProcess) {
-                return getHoleInProcessWithSubProcesses(process, hole);         
+                const subProcesses = getHoleInProcessWithSubProcesses(process, hole);
+                if (subProcesses) {
+                    return rebuild(new ccs.SummationProcess(subProcesses));
+                }
             }
-
-            if (process.id == hole.id) {
+            else if (process.id == hole.id) {
                 const ctx: ccs.Process = rebuild(new ccs.HoleProcess());
                 return ctx;
             }
-
         }
 
         getContextCandidate(process: ccs.Process, hole: ccs.Process): ccs.Process[] {
@@ -179,11 +196,7 @@ module Equivalence {
                 node.dispatchOn<void>({
                     dispatchNullProcess(n: ccs.NullProcess): void { },
 
-                    dispatchNamedProcess(n: ccs.NamedProcess): void {
-                        getContextCandidatesRecursively(n.subProcess, hole => {
-                            return rebuild(new ccs.NamedProcess(n.name, hole));
-                        });
-                    },
+                    dispatchNamedProcess(n: ccs.NamedProcess): void { },
 
                     dispatchSummationProcess(n: ccs.SummationProcess): void {
                         for (let i = 0; i < n.subProcesses.length; i++) {
@@ -239,8 +252,8 @@ module Equivalence {
             const rightContexts = this.getRightContextCandidates(rightProcess, bisimilarProcessPairs);
 
             // 3. If matching context candidates are found, using the same bisimilar process pair, then the processes are bisimilar up to context.
-            leftContexts.forEach(leftContext => {
-                rightContexts.forEach(rightContext => {
+            for (const leftContext of leftContexts) {
+                for (const rightContext of rightContexts) {
                     const hasSameProcessPair: boolean = leftContext[1] === rightContext[1];
                     if (hasSameProcessPair) {
                         const hasSameContext = leftContext[0].id === rightContext[0].id;
@@ -248,9 +261,8 @@ module Equivalence {
                             return true;
                         }
                     }
-                });
-            });
-
+                }
+            }
             return false;
         }
 
