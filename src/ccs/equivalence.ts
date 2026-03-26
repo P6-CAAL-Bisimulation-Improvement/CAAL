@@ -123,33 +123,27 @@ module Equivalence {
         getHoleInProcess(process: ccs.Process, hole: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): ccs.Process | undefined {
             const getHoleInProcessWithSubProcesses = <T extends { subProcesses: ccs.Process[] }>(process: T, hole: T) => {
                 var resultingSubProcesses: ccs.Process[] = [];
+                var holeIndex = 0;
 
-                // Loops without increments in definitions
-                var holeIndex = 0, processIndex = 0;
-                while (holeIndex < hole.subProcesses.length) {
-                    while (processIndex < process.subProcesses.length) {
-                        if (process.subProcesses[processIndex].id == hole.subProcesses[holeIndex].id) {
-                            // If the current sub process is in the hole, then we go to the next sub processes for both hole and process
-                            holeIndex++;
-                            processIndex++;
-                        }
-                        else {
-                            // Else we check the next sub process of the process
-                            processIndex++;
-                            resultingSubProcesses.push(process.subProcesses[processIndex]);
-                        }
-                        
+                for (let processIndex = 0; processIndex < process.subProcesses.length; processIndex++) {
+                    if (process.subProcesses[processIndex].id == hole.subProcesses[holeIndex].id) {
+                        // If the current sub process is in the hole, then we go to the next sub processes for both hole and process
+                        holeIndex++;
                     }
-                    // If we still have sub process in hole, then it is not a subset of the process, so we return undefined
-                    return undefined;
+                    else {
+                        // Else we check the next sub process of the process
+                        resultingSubProcesses.push(process.subProcesses[processIndex]);
+                    }
                 }
-                // Go through the rest of the sub processes of the process, since we exited because the hole was looped through, and add them to the resulting sub processes
-                while (processIndex < process.subProcesses.length) {
-                    processIndex++;
-                    resultingSubProcesses.push(process.subProcesses[processIndex]);
+
+                if (holeIndex < hole.subProcesses.length) {
+                    // Entire hole is not found in process, thus we cannot find a context
+                    return undefined;
                 }
                 
                 resultingSubProcesses.push(new ccs.HoleProcess());
+                resultingSubProcesses.sort();
+                // Return sorted contex with hole
                 return rebuild(new ccs.CompositionProcess(resultingSubProcesses));
             }
 
