@@ -278,12 +278,12 @@ module CCS {
         }
 
         getProcesses(): Process[]{
-            var proccesses: Process[]  = [];
+            var processes: Process[]  = [];
             for (const id in this.processes) {
-                proccesses.push(this.processes[id]);
+                processes.push(this.processes[id]);
 
             }
-            return this.processes as unknown as Process[];
+            return processes;
         }
 
         newNamedProcess(processName : string, process : Process) {
@@ -740,7 +740,7 @@ module CCS {
             this.cache = cache || {};
         }
 
-        getGraph() {
+        getGraph() : Graph {
             return this.graph;
         }
 

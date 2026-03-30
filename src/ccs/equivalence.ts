@@ -274,7 +274,7 @@ module Equivalence {
             // for (s, fromRightId), s ----action---> toLeftId.
             // fromRightId must be able to match.
             var rightTransitions = this.defendSuccGen.getSuccessors(fromRightId);
-
+            var allTransitionsBisimilarUpToContext = true;
             rightTransitions.forEach(rightTransition => {
                 var existing, toRightId;
                 //Same action - possible candidate.
@@ -283,10 +283,20 @@ module Equivalence {
                     if (this.isBisimilarUpToContext(leftProcess, rightTransition.targetProcess) == false) {
                         toRightId = rightTransition.targetProcess.id;
                         result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                        allTransitionsBisimilarUpToContext = false;
                     }
                 }
+                else {
+                    allTransitionsBisimilarUpToContext = false;
+                }
             });
-            return [result];
+
+            if (allTransitionsBisimilarUpToContext) {
+                return [];
+            }
+            else {
+                return [result];
+            }
         }
 
         private getNodeForRightTransition(data) {
@@ -296,6 +306,7 @@ module Equivalence {
                 result = [];
 
             var leftTransitions = this.defendSuccGen.getSuccessors(fromLeftId);
+            var allTransitionsBisimilarUpToContext = true;
             leftTransitions.forEach(leftTransition => {
                 var existing, toLeftId;
                 if (leftTransition.action.equals(action)) {
@@ -303,10 +314,20 @@ module Equivalence {
                     if (this.isBisimilarUpToContext(leftTransition.targetProcess, rightProcess) == false) {
                         toLeftId = leftTransition.targetProcess.id;
                         result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                        allTransitionsBisimilarUpToContext = false;
                     }
                 }
+                else {
+                    allTransitionsBisimilarUpToContext = false;
+                }
             });
-            return [result];
+
+            if (allTransitionsBisimilarUpToContext) {
+                return [];
+            }
+            else {
+                return [result];
+            }
         }
 
         private getOrCreatePairNode(leftId: ccs.ProcessId, rightId: ccs.ProcessId): dg.DgNodeId {

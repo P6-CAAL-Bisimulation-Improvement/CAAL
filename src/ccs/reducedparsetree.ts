@@ -331,7 +331,16 @@ module Traverse {
         }
 
         getProcessById(processId : ccs.ProcessId) : ccs.Process {
-            var proc = this.succGenerator.getProcessById(processId);
+            var proc: ccs.Process | undefined;
+            // Since we return transition processes in normal form, we need to find the process with the same normal form
+            this.getGraph().getProcesses().forEach(process => {
+                if (proc) return;
+
+                const normalFormProcess = this.getNormalFormFromProcess(process);
+                if (normalFormProcess.id === processId) {
+                    proc = normalFormProcess;
+                }
+            });
             return this.reducer.visit(proc);
         }
 
