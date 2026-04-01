@@ -274,24 +274,24 @@ module Equivalence {
             // for (s, fromRightId), s ----action---> toLeftId.
             // fromRightId must be able to match.
             var rightTransitions = this.defendSuccGen.getSuccessors(fromRightId);
-            var allTransitionsBisimilarUpToContext = true;
+            var transitionWasBisimilarUpToContext = false;
             rightTransitions.forEach(rightTransition => {
                 var existing, toRightId;
                 //Same action - possible candidate.
                 if (rightTransition.action.equals(action)) {
                     const leftProcess = this.defendSuccGen.getProcessById(toLeftId);
-                    if (this.isBisimilarUpToContext(leftProcess, rightTransition.targetProcess) == false) {
+                    if (this.isBisimilarUpToContext(leftProcess, rightTransition.targetProcess)) {
+                        transitionWasBisimilarUpToContext = true;
+                        return;
+                    }
+                    else {
                         toRightId = rightTransition.targetProcess.id;
                         result.push(this.getOrCreatePairNode(toLeftId, toRightId));
-                        allTransitionsBisimilarUpToContext = false;
                     }
-                }
-                else {
-                    allTransitionsBisimilarUpToContext = false;
                 }
             });
 
-            if (allTransitionsBisimilarUpToContext) {
+            if (transitionWasBisimilarUpToContext) {
                 return [];
             }
             else {
@@ -306,19 +306,19 @@ module Equivalence {
                 result = [];
 
             var leftTransitions = this.defendSuccGen.getSuccessors(fromLeftId);
-            var allTransitionsBisimilarUpToContext = true;
+            var allTransitionsBisimilarUpToContext = false;
             leftTransitions.forEach(leftTransition => {
                 var existing, toLeftId;
                 if (leftTransition.action.equals(action)) {
                     const rightProcess = this.defendSuccGen.getProcessById(toRightId);
-                    if (this.isBisimilarUpToContext(leftTransition.targetProcess, rightProcess) == false) {
+                    if (this.isBisimilarUpToContext(leftTransition.targetProcess, rightProcess)) {
+                        allTransitionsBisimilarUpToContext = true;
+                        return;
+                    }
+                    else {
                         toLeftId = leftTransition.targetProcess.id;
                         result.push(this.getOrCreatePairNode(toLeftId, toRightId));
-                        allTransitionsBisimilarUpToContext = false;
                     }
-                }
-                else {
-                    allTransitionsBisimilarUpToContext = false;
                 }
             });
 

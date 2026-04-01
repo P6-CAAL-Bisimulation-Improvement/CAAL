@@ -18,6 +18,18 @@
             "name": "Launch Firefox",
             "url": "http://localhost:8090",
             "webRoot": "${workspaceFolder}",
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "QUnit Tests",
+            "program": "${workspaceFolder}/node_modules/.bin/qunit",
+            "args": [
+                "--require",
+                "./test/bootstrap.js",
+                "test/integration/*.js"
+            ],
+            "cwd": "${workspaceFolder}"
         }
     ]
 }
