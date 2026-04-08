@@ -81,13 +81,14 @@ module Equivalence {
             return result;
         }
 
-        getAllBisimilarProcessPairs(): [ccs.Process, ccs.Process][] {
+        getAllFoundProcessPairs(): [ccs.Process, ccs.Process][] {
             var result: [ccs.Process, ccs.Process][] = [];
             for (var i = 0; i < this.nextIdx; i++) {
                 // If pair, then save
                 if (this.constructData[i][0] === 0) {
                     const [leftId, rightId] = [this.constructData[i][1], this.constructData[i][2]];
                     const [leftProcess, rightProcess] = [this.attackSuccGen.getProcessById(leftId), this.attackSuccGen.getProcessById(rightId)];
+                    
                     result.push([leftProcess, rightProcess]);
                 }
             }
@@ -243,27 +244,28 @@ module Equivalence {
             return results;
         }
 
-        isBisimilarUpToContext(leftProcess: ccs.Process, rightProcess: ccs.Process): boolean {
+        GetBackEdgePairThroughUpToContext(leftProcess: ccs.Process, rightProcess: ccs.Process): [ccs.Process, ccs.Process] | undefined {
             // 1. Get possible pairs of holes for context candidates, which is each bisimilar process pair
-            const bisimilarProcessPairs = this.getAllBisimilarProcessPairs();
+            const bisimilarProcessPairs = this.getAllFoundProcessPairs();
 
             // 2. Find the resulting context candidates of each pair of holes
             const leftContexts = this.getLeftContextCandidates(leftProcess, bisimilarProcessPairs);
             const rightContexts = this.getRightContextCandidates(rightProcess, bisimilarProcessPairs);
 
-            // 3. If matching context candidates are found, using the same bisimilar process pair, then the processes are bisimilar up to context.
+            // 3. If matching context candidates are found, using the same process pair, then the processes are bisimilar up to context.
             for (const leftContext of leftContexts) {
                 for (const rightContext of rightContexts) {
                     const hasSameProcessPair: boolean = leftContext[1] === rightContext[1];
                     if (hasSameProcessPair) {
                         const hasSameContext = leftContext[0].id === rightContext[0].id;
                         if (hasSameContext) {
-                            return true;
+                            // return the process pair for which the context candidates are bisimilar
+                            return leftContext[1];
                         }
                     }
                 }
             }
-            return false;
+            return undefined;
         }
 
         private getNodeForLeftTransition(data) {
@@ -276,27 +278,24 @@ module Equivalence {
             var rightTransitions = this.defendSuccGen.getSuccessors(fromRightId);
             var transitionWasBisimilarUpToContext = false;
             rightTransitions.forEach(rightTransition => {
-                var existing, toRightId;
                 //Same action - possible candidate.
                 if (rightTransition.action.equals(action)) {
                     const leftProcess = this.defendSuccGen.getProcessById(toLeftId);
-                    if (this.isBisimilarUpToContext(leftProcess, rightTransition.targetProcess)) {
-                        transitionWasBisimilarUpToContext = true;
-                        return;
+
+                    // If the processes are bisimilar up to context, then we do not need to add a node for this transition, since it depends on whether the holes are bisimilar 
+                    const backEdgePair = this.GetBackEdgePairThroughUpToContext(leftProcess, rightTransition.targetProcess);
+                    var pairNode;
+                    if (backEdgePair) {
+                        pairNode = this.getOrCreatePairNode(backEdgePair[0].id, backEdgePair[1].id);
                     }
                     else {
-                        toRightId = rightTransition.targetProcess.id;
-                        result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                        const toRightId = rightTransition.targetProcess.id;
+                        pairNode = this.getOrCreatePairNode(toLeftId, toRightId);
                     }
+                    result.push(pairNode);
                 }
             });
-
-            if (transitionWasBisimilarUpToContext) {
-                return [];
-            }
-            else {
-                return [result];
-            }
+            return [result];
         }
 
         private getNodeForRightTransition(data) {
@@ -306,28 +305,25 @@ module Equivalence {
                 result = [];
 
             var leftTransitions = this.defendSuccGen.getSuccessors(fromLeftId);
-            var allTransitionsBisimilarUpToContext = false;
             leftTransitions.forEach(leftTransition => {
-                var existing, toLeftId;
                 if (leftTransition.action.equals(action)) {
                     const rightProcess = this.defendSuccGen.getProcessById(toRightId);
-                    if (this.isBisimilarUpToContext(leftTransition.targetProcess, rightProcess)) {
-                        allTransitionsBisimilarUpToContext = true;
-                        return;
+
+                    // If the processes are bisimilar up to context, then we do not need to add a node for this transition, since it depends on whether the holes are bisimilar
+                    const backEdgePair = this.GetBackEdgePairThroughUpToContext(leftTransition.targetProcess, rightProcess);
+                    var pairNode;
+                    if (backEdgePair) {
+                        pairNode = this.getOrCreatePairNode(backEdgePair[0].id, backEdgePair[1].id);
                     }
                     else {
-                        toLeftId = leftTransition.targetProcess.id;
-                        result.push(this.getOrCreatePairNode(toLeftId, toRightId));
+                        const toLeftId = leftTransition.targetProcess.id;
+                        pairNode = this.getOrCreatePairNode(toLeftId, toRightId);
                     }
+                    result.push(pairNode);
                 }
             });
 
-            if (allTransitionsBisimilarUpToContext) {
-                return [];
-            }
-            else {
-                return [result];
-            }
+            return [result];
         }
 
         private getOrCreatePairNode(leftId: ccs.ProcessId, rightId: ccs.ProcessId): dg.DgNodeId {
