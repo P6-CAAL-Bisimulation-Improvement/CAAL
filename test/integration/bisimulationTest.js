@@ -8,10 +8,6 @@ function getStrictSuccGenerator(graph) {
     return CCS.getSuccGenerator(graph, {succGen: "strong", reduce: true});
 }
 
-function getSuccGenerator(graph, options) {
-    return CCS.getSuccGenerator(graph, options);
-}
-
 function getWeakSuccGenerator(graph) {
     return CCS.getSuccGenerator(graph, {succGen: "weak", reduce: true});
 }
@@ -211,7 +207,7 @@ QUnit.test("Bad CM and CS", function ( assert) {
 
 QUnit.test("Strong bisimilar recursive", function ( assert) {
     var graph = CCSParser.parse("P = a.(a.0|P);Q = P|P;", {ccs: CCS}),
-        strongSuccGen = getSuccGenerator(graph, {succGen: "strong", reduce: true, noRedundancy: true}),
+        strongSuccGen = getStrictSuccGenerator(graph),
         processP = graph.processByName("P"),
         processQ = graph.processByName("Q");
     assert.ok(Equivalence.isBisimilar(strongSuccGen, strongSuccGen, processP.id, processQ.id, graph), "P and Q should be bisimilar");
@@ -219,7 +215,7 @@ QUnit.test("Strong bisimilar recursive", function ( assert) {
 
 QUnit.test("Not strong bisimilar recursive", function ( assert) {
     var graph = CCSParser.parse("P = a.(a.0|P);Q = P|P|b.0;", {ccs: CCS}),
-        strongSuccGen = getSuccGenerator(graph, {succGen: "strong", reduce: true, noRedundancy: true}),
+        strongSuccGen = getStrictSuccGenerator(graph),
         processP = graph.processByName("P"),
         processQ = graph.processByName("Q");
     assert.ok(!Equivalence.isBisimilar(strongSuccGen, strongSuccGen, processP.id, processQ.id, graph), "P and Q should not be bisimilar");

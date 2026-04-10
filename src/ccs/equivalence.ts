@@ -40,6 +40,90 @@ module Equivalence {
             return collapse;
         }
 
+        getNormalFormFromProcess(process: ccs.Process): ccs.Process {
+            const getSubProcessesInNormalForm = <T extends { subProcesses: ccs.Process[] }>(process: T) => {
+                var newSubProcesses: ccs.Process[] = [];
+
+                // Change all subprocesses to normal form
+                process.subProcesses.forEach((subProcess) => {
+                    var normalFormSubProcess = this.getNormalFormFromProcess(subProcess);
+                    newSubProcesses.push(normalFormSubProcess);
+                });
+                
+                return newSubProcesses;
+            };
+
+            var normalFormProcess: ccs.Process = process;
+            if (process instanceof ccs.SummationProcess) {
+                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
+
+                var newSubProcesses: ccs.Process[] = [];
+                normalFormSubprocesses.forEach(subProcess => {
+                    // Null element: P + 0 => P
+                    if (subProcess instanceof ccs.NullProcess) {
+                        return;
+                    }
+                    // Idempotence: P + P => P
+                    else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
+                        return;
+                    }
+                    // Flatten: P + (Q + R) => P + Q + R
+                    else if (subProcess instanceof ccs.SummationProcess) {
+                        subProcess.subProcesses.forEach(nested => {
+                            newSubProcesses.push(nested);
+                        });
+                    }
+                    else {
+                        newSubProcesses.push(subProcess);
+                    }
+                });
+                // Symmetry: P + Q => Q + P, order by id
+                newSubProcesses.sort();
+                normalFormProcess = new ccs.SummationProcess(newSubProcesses);
+            }
+            else if (process instanceof ccs.ActionPrefixProcess) {
+                normalFormProcess = new ccs.ActionPrefixProcess(process.action, this.getNormalFormFromProcess(process.nextProcess));
+            }
+            else if (process instanceof ccs.CompositionProcess) {
+                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
+
+                var newSubProcesses: ccs.Process[] = [];
+                normalFormSubprocesses.forEach(subProcess => {
+                    // Null element: P | 0 => P
+                    if (subProcess instanceof ccs.NullProcess) {
+                        return;
+                    }
+                    // Idempotence is not valid when compositions can synchronize
+                    // Flatten: P | (Q | R) => P | Q | R
+                    else if (subProcess instanceof ccs.CompositionProcess) {
+                        subProcess.subProcesses.forEach(nested => {
+                            newSubProcesses.push(nested);
+                        });
+                    }
+                    else {
+                        newSubProcesses.push(subProcess);
+                    }
+                });
+                // Symmetry: P | Q => Q | P, order by id
+                newSubProcesses.sort();
+                normalFormProcess = new ccs.CompositionProcess(newSubProcesses);
+            }
+            else if (process instanceof ccs.RelabellingProcess) {
+                normalFormProcess = new ccs.RelabellingProcess(this.getNormalFormFromProcess(process.subProcess), process.relabellings);
+            }
+            else if (process instanceof ccs.RestrictionProcess) {
+                normalFormProcess = new ccs.RestrictionProcess(this.getNormalFormFromProcess(process.subProcess), process.restrictedLabels);
+            }
+            else if (process instanceof ccs.NamedProcess) {
+                // Nothing to rewrite
+            }
+            else if (process instanceof ccs.NullProcess) {
+                // Nothing to rewrite
+            }
+
+            return normalFormProcess;
+        }
+
         getHyperEdges(identifier: dg.DgNodeId): dg.Hyperedge[] {
             var type, result;
             //Have we already built this? Then return copy of the edges.
@@ -95,177 +179,12 @@ module Equivalence {
             return result;
         }
 
-        getLeftContextCandidates(leftProcess: ccs.Process, bisimilarProcessPairs: [ccs.Process, ccs.Process][]): [ccs.Process, [ccs.Process, ccs.Process]][] {
-            var result: [ccs.Process, [ccs.Process, ccs.Process]][] = [];
-
-            // 1. Get all contexts of leftProcess with a hole, which is bisimilar to the first process in the bisimilarProcessPair
-            bisimilarProcessPairs.forEach((bisimilarProcessPair) => {
-                this.getContextCandidate(leftProcess, bisimilarProcessPair[0]).forEach(contextCandidate => {
-                    result.push([contextCandidate, bisimilarProcessPair]);
-                });
-            });
-
-            return result;
-        }
-
-        getRightContextCandidates(rightProcess: ccs.Process, bisimilarProcessPairs: [ccs.Process, ccs.Process][]): [ccs.Process, [ccs.Process, ccs.Process]][] {
-            var result: [ccs.Process, [ccs.Process, ccs.Process]][] = [];
-
-            // 1. Get all contexts of rightProcess with a hole, which is bisimilar to the second process in the bisimilarProcessPair
-            bisimilarProcessPairs.forEach((bisimilarProcessPair) => {
-                this.getContextCandidate(rightProcess, bisimilarProcessPair[1]).forEach(contextCandidate => {
-                    result.push([contextCandidate, bisimilarProcessPair]);
-                });
-            });
-
-            return result;
-        }
-
-        getHoleInProcess(process: ccs.Process, hole: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): ccs.Process | undefined {
-            var result: ccs.Process | undefined = undefined;
-
-            const getHoleInProcessWithSubProcesses = <T extends { subProcesses: ccs.Process[] }>(process: T, hole: T) => {
-                var resultingSubProcesses: ccs.Process[] = [];
-                var holeIndex = 0;
-
-                for (let processIndex = 0; processIndex < process.subProcesses.length; processIndex++) {
-                    // If the hole is found but there are still sub processes in the process
-                    if (holeIndex >= hole.subProcesses.length) {
-                        resultingSubProcesses.push(process.subProcesses[processIndex]);
-                    }
-                    // If the current sub process is in the hole, then we go to the next sub processes for both hole and process
-                    else if (process.subProcesses[processIndex].id == hole.subProcesses[holeIndex].id) {
-                        holeIndex++;
-                    }
-                    // Else we check the next sub process of the process
-                    else {
-                        resultingSubProcesses.push(process.subProcesses[processIndex]);
-                    }
-                }
-
-                // Entire hole is not found in process, thus we cannot find a context
-                if (holeIndex < hole.subProcesses.length) {
-                    return undefined;
-                }
-                
-                resultingSubProcesses.push(new ccs.HoleProcess());
-                resultingSubProcesses.sort();
-                // Return sorted contex with hole
-                return resultingSubProcesses;
-            }
-
-            if (process instanceof ccs.NamedProcess) {
-                process = process.subProcess;
-            }
-            if (hole instanceof ccs.NamedProcess) {
-                hole = hole.subProcess;
-            }
-
-            if (process instanceof ccs.CompositionProcess && hole instanceof ccs.CompositionProcess) {
-                const subProcesses = getHoleInProcessWithSubProcesses(process, hole);
-                if (subProcesses) {
-                    return rebuild(new ccs.CompositionProcess(subProcesses));
-                }
-            }
-            else if (process instanceof ccs.SummationProcess && hole instanceof ccs.SummationProcess) {
-                const subProcesses = getHoleInProcessWithSubProcesses(process, hole);
-                if (subProcesses) {
-                    return rebuild(new ccs.SummationProcess(subProcesses));
-                }
-            }
-            else if (process.id == hole.id) {
-                const ctx: ccs.Process = rebuild(new ccs.HoleProcess());
-                return ctx;
-            }
-        }
-
-        getContextCandidate(process: ccs.Process, hole: ccs.Process): ccs.Process[] {
-            const seen: string[] = [];
-            const results: ccs.Process[] = [];
-            
-            const getContextCandidatesRecursively = (node: ccs.Process, rebuild: (hole: ccs.Process) => ccs.Process): void => {
-                const ctxCandidate = this.getHoleInProcess(node, hole, rebuild);
-
-                if (ctxCandidate) {
-                    const key: string = ctxCandidate.id;
-                    if (seen.indexOf(key) == -1) {
-                        seen.push(key);
-                        results.push(ctxCandidate);
-                    }
-                }
-
-                node.dispatchOn<void>({
-                    dispatchNullProcess(n: ccs.NullProcess): void { },
-
-                    dispatchNamedProcess(n: ccs.NamedProcess): void { },
-
-                    dispatchSummationProcess(n: ccs.SummationProcess): void {
-                        for (let i = 0; i < n.subProcesses.length; i++) {
-                            getContextCandidatesRecursively(n.subProcesses[i], hole => {
-                                const next: ccs.Process[] = n.subProcesses.slice();
-                                next[i] = hole;
-                                return rebuild(new ccs.SummationProcess(next));
-                            });
-                        }
-                    },
-
-                    dispatchCompositionProcess(n: ccs.CompositionProcess): void {
-                        for (let i = 0; i < n.subProcesses.length; i++) {
-                            getContextCandidatesRecursively(n.subProcesses[i], hole => {
-                                const next: ccs.Process[] = n.subProcesses.slice();
-                                next[i] = hole;
-                                return rebuild(new ccs.CompositionProcess(next));
-                            });
-                        }
-                    },
-
-                    dispatchActionPrefixProcess(n: ccs.ActionPrefixProcess): void {
-                        getContextCandidatesRecursively(n.nextProcess, hole =>
-                            rebuild(new ccs.ActionPrefixProcess(n.action, hole))
-                        );
-                    },
-
-                    dispatchRestrictionProcess(n: ccs.RestrictionProcess): void {
-                        getContextCandidatesRecursively(n.subProcess, hole =>
-                            rebuild(new ccs.RestrictionProcess(hole, n.restrictedLabels))
-                        );
-                    },
-
-                    dispatchRelabellingProcess(n: ccs.RelabellingProcess): void {
-                        getContextCandidatesRecursively(n.subProcess, hole =>
-                            rebuild(new ccs.RelabellingProcess(hole, n.relabellings))
-                        );
-                    },
-                });
-            }
-            getContextCandidatesRecursively.bind(this);
-
-            getContextCandidatesRecursively(process, x => x);
-            return results;
-        }
-
-        GetBackEdgePairThroughUpToContext(leftProcess: ccs.Process, rightProcess: ccs.Process): [ccs.Process, ccs.Process] | undefined {
-            // 1. Get possible pairs of holes for context candidates, which is each bisimilar process pair
-            const bisimilarProcessPairs = this.getAllFoundProcessPairs();
-
-            // 2. Find the resulting context candidates of each pair of holes
-            const leftContexts = this.getLeftContextCandidates(leftProcess, bisimilarProcessPairs);
-            const rightContexts = this.getRightContextCandidates(rightProcess, bisimilarProcessPairs);
-
-            // 3. If matching context candidates are found, using the same process pair, then the processes are bisimilar up to context.
-            for (const leftContext of leftContexts) {
-                for (const rightContext of rightContexts) {
-                    const hasSameProcessPair: boolean = leftContext[1] === rightContext[1];
-                    if (hasSameProcessPair) {
-                        const hasSameContext = leftContext[0].id === rightContext[0].id;
-                        if (hasSameContext) {
-                            // return the process pair for which the context candidates are bisimilar
-                            return leftContext[1];
-                        }
-                    }
-                }
-            }
-            return undefined;
+        private getBackEdgePair(leftProcess: ccs.Process, rightProcess: ccs.Process): [CCS.Process, CCS.Process] | undefined {
+            const leftNormalForm = this.getNormalFormFromProcess(leftProcess);
+            const rightNormalForm = this.getNormalFormFromProcess(rightProcess);
+            const processPairs = this.getAllFoundProcessPairs();
+            const backEdgePair = GetBackEdgePairThroughUpToContext(leftNormalForm, rightNormalForm, processPairs);
+            return backEdgePair;    
         }
 
         private getNodeForLeftTransition(data) {
@@ -282,8 +201,9 @@ module Equivalence {
                 if (rightTransition.action.equals(action)) {
                     const leftProcess = this.defendSuccGen.getProcessById(toLeftId);
 
-                    // If the processes are bisimilar up to context, then we do not need to add a node for this transition, since it depends on whether the holes are bisimilar 
-                    const backEdgePair = this.GetBackEdgePairThroughUpToContext(leftProcess, rightTransition.targetProcess);
+                    const backEdgePair = this.getBackEdgePair(leftProcess, rightTransition.targetProcess);
+
+                    // If we found a back edge pair, then the bisimilarity of the processes depends on the bisimilarity of the holes, so we don't need to generate successors
                     var pairNode;
                     if (backEdgePair) {
                         pairNode = this.getOrCreatePairNode(backEdgePair[0].id, backEdgePair[1].id);
@@ -309,8 +229,9 @@ module Equivalence {
                 if (leftTransition.action.equals(action)) {
                     const rightProcess = this.defendSuccGen.getProcessById(toRightId);
 
-                    // If the processes are bisimilar up to context, then we do not need to add a node for this transition, since it depends on whether the holes are bisimilar
-                    const backEdgePair = this.GetBackEdgePairThroughUpToContext(leftTransition.targetProcess, rightProcess);
+                    const backEdgePair = this.getBackEdgePair(leftTransition.targetProcess, rightProcess);
+
+                    // If we found a back edge pair, then the bisimilarity of the processes depends on the bisimilarity of the holes, so we don't need to generate successors
                     var pairNode;
                     if (backEdgePair) {
                         pairNode = this.getOrCreatePairNode(backEdgePair[0].id, backEdgePair[1].id);

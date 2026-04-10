@@ -900,7 +900,7 @@ module CCS {
     }
 
     export function getSuccGenerator(graph : Graph, options : any) : SuccessorGenerator {
-        var settings = { inputMode: "CCS", succGen: "strong", reduce: true, time: "timed", noRedundancy: false},
+        var settings = { inputMode: "CCS", succGen: "strong", reduce: true, time: "timed"},
             succGenerator: SuccessorGenerator,
             treeReducer: Traverse.ProcessTreeReducer;
 
@@ -944,10 +944,6 @@ module CCS {
                     succGenerator = new Traverse.UntimedSuccessorGenerator(succGenerator);
                 }
             }
-        }
-
-        if (settings.noRedundancy) {
-            succGenerator = new Traverse.NoRedundancySuccessorGenerator(succGenerator, treeReducer);
         }
 
         return succGenerator;
