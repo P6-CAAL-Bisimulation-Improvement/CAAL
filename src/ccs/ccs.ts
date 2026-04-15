@@ -438,6 +438,10 @@ module CCS {
             });
         }
 
+        toArray() : {from: string; to: string}[] {
+            return this.froms.map((from, i) => ({ from, to: this.tos[i] }));
+        }
+
         forEach(f : (from : string, to : string) => void, thisObject?) {
             for (var i = 0, max = this.froms.length; i < max; i++) {
                 f.call(thisObject, this.froms[i], this.tos[i]);

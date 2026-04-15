@@ -1,6 +1,7 @@
 /// <reference path="ccs.ts" />
 /// <reference path="hml.ts" />
 /// <reference path="depgraph.ts" />
+/// <reference path="up-to-context.ts" />
 
 module Equivalence {
 
@@ -38,90 +39,6 @@ module Equivalence {
         getCollapse(): Traverse.Collapse {
             const collapse = this.getBisimulationCollapse(dg.solveDgGlobalLevel(this), this.attackSuccGen.getGraph());
             return collapse;
-        }
-
-        getNormalFormFromProcess(process: ccs.Process): ccs.Process {
-            const getSubProcessesInNormalForm = <T extends { subProcesses: ccs.Process[] }>(process: T) => {
-                var newSubProcesses: ccs.Process[] = [];
-
-                // Change all subprocesses to normal form
-                process.subProcesses.forEach((subProcess) => {
-                    var normalFormSubProcess = this.getNormalFormFromProcess(subProcess);
-                    newSubProcesses.push(normalFormSubProcess);
-                });
-                
-                return newSubProcesses;
-            };
-
-            var normalFormProcess: ccs.Process = process;
-            if (process instanceof ccs.SummationProcess) {
-                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
-
-                var newSubProcesses: ccs.Process[] = [];
-                normalFormSubprocesses.forEach(subProcess => {
-                    // Null element: P + 0 => P
-                    if (subProcess instanceof ccs.NullProcess) {
-                        return;
-                    }
-                    // Idempotence: P + P => P
-                    else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
-                        return;
-                    }
-                    // Flatten: P + (Q + R) => P + Q + R
-                    else if (subProcess instanceof ccs.SummationProcess) {
-                        subProcess.subProcesses.forEach(nested => {
-                            newSubProcesses.push(nested);
-                        });
-                    }
-                    else {
-                        newSubProcesses.push(subProcess);
-                    }
-                });
-                // Symmetry: P + Q => Q + P, order by id
-                newSubProcesses.sort();
-                normalFormProcess = new ccs.SummationProcess(newSubProcesses);
-            }
-            else if (process instanceof ccs.ActionPrefixProcess) {
-                normalFormProcess = new ccs.ActionPrefixProcess(process.action, this.getNormalFormFromProcess(process.nextProcess));
-            }
-            else if (process instanceof ccs.CompositionProcess) {
-                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
-
-                var newSubProcesses: ccs.Process[] = [];
-                normalFormSubprocesses.forEach(subProcess => {
-                    // Null element: P | 0 => P
-                    if (subProcess instanceof ccs.NullProcess) {
-                        return;
-                    }
-                    // Idempotence is not valid when compositions can synchronize
-                    // Flatten: P | (Q | R) => P | Q | R
-                    else if (subProcess instanceof ccs.CompositionProcess) {
-                        subProcess.subProcesses.forEach(nested => {
-                            newSubProcesses.push(nested);
-                        });
-                    }
-                    else {
-                        newSubProcesses.push(subProcess);
-                    }
-                });
-                // Symmetry: P | Q => Q | P, order by id
-                newSubProcesses.sort();
-                normalFormProcess = new ccs.CompositionProcess(newSubProcesses);
-            }
-            else if (process instanceof ccs.RelabellingProcess) {
-                normalFormProcess = new ccs.RelabellingProcess(this.getNormalFormFromProcess(process.subProcess), process.relabellings);
-            }
-            else if (process instanceof ccs.RestrictionProcess) {
-                normalFormProcess = new ccs.RestrictionProcess(this.getNormalFormFromProcess(process.subProcess), process.restrictedLabels);
-            }
-            else if (process instanceof ccs.NamedProcess) {
-                // Nothing to rewrite
-            }
-            else if (process instanceof ccs.NullProcess) {
-                // Nothing to rewrite
-            }
-
-            return normalFormProcess;
         }
 
         getHyperEdges(identifier: dg.DgNodeId): dg.Hyperedge[] {
@@ -180,10 +97,8 @@ module Equivalence {
         }
 
         private getBackEdgePair(leftProcess: ccs.Process, rightProcess: ccs.Process): [CCS.Process, CCS.Process] | undefined {
-            const leftNormalForm = this.getNormalFormFromProcess(leftProcess);
-            const rightNormalForm = this.getNormalFormFromProcess(rightProcess);
             const processPairs = this.getAllFoundProcessPairs();
-            const backEdgePair = GetBackEdgePairThroughUpToContext(leftNormalForm, rightNormalForm, processPairs);
+            const backEdgePair = GetBackEdgePairThroughUpToContext(leftProcess, rightProcess, processPairs);
             return backEdgePair;    
         }
 
@@ -200,19 +115,13 @@ module Equivalence {
                 //Same action - possible candidate.
                 if (rightTransition.action.equals(action)) {
                     const leftProcess = this.defendSuccGen.getProcessById(toLeftId);
-
-                    const backEdgePair = this.getBackEdgePair(leftProcess, rightTransition.targetProcess);
-
-                    // If we found a back edge pair, then the bisimilarity of the processes depends on the bisimilarity of the holes, so we don't need to generate successors
-                    var pairNode;
-                    if (backEdgePair) {
-                        pairNode = this.getOrCreatePairNode(backEdgePair[0].id, backEdgePair[1].id);
-                    }
-                    else {
-                        const toRightId = rightTransition.targetProcess.id;
-                        pairNode = this.getOrCreatePairNode(toLeftId, toRightId);
-                    }
-                    result.push(pairNode);
+                    
+                    const pairs = GetPairsWhichDeterminBisimilarityOnly(leftProcess, rightTransition.targetProcess);
+                    pairs.forEach(pair => {
+                        const [leftPairProcess, rightPairProcess] = pair;
+                        const pairNode = this.getOrCreatePairNode(leftPairProcess.id, rightPairProcess.id);
+                        result.push(pairNode);
+                    });
                 }
             });
             return [result];
@@ -229,18 +138,12 @@ module Equivalence {
                 if (leftTransition.action.equals(action)) {
                     const rightProcess = this.defendSuccGen.getProcessById(toRightId);
 
-                    const backEdgePair = this.getBackEdgePair(leftTransition.targetProcess, rightProcess);
-
-                    // If we found a back edge pair, then the bisimilarity of the processes depends on the bisimilarity of the holes, so we don't need to generate successors
-                    var pairNode;
-                    if (backEdgePair) {
-                        pairNode = this.getOrCreatePairNode(backEdgePair[0].id, backEdgePair[1].id);
-                    }
-                    else {
-                        const toLeftId = leftTransition.targetProcess.id;
-                        pairNode = this.getOrCreatePairNode(toLeftId, toRightId);
-                    }
-                    result.push(pairNode);
+                    const pairs = GetPairsWhichDeterminBisimilarityOnly(leftTransition.targetProcess, rightProcess);
+                    pairs.forEach(pair => {
+                        const [leftPairProcess, rightPairProcess] = pair;
+                        const pairNode = this.getOrCreatePairNode(leftPairProcess.id, rightPairProcess.id);
+                        result.push(pairNode);
+                    });
                 }
             });
 
