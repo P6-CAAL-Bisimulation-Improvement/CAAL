@@ -40,86 +40,91 @@ module Equivalence {
             return collapse;
         }
 
-        getNormalFormFromProcess(process: ccs.Process): ccs.Process {
-            const getSubProcessesInNormalForm = <T extends { subProcesses: ccs.Process[] }>(process: T) => {
-                var newSubProcesses: ccs.Process[] = [];
+        getNormalFormFromProcess(process: CCS.Process): CCS.Process {
+            const getSubProcessesInNormalForm = <T extends { subProcesses: CCS.Process[] }>(process: T) => {
+                var newSubProcesses: CCS.Process[] = [];
 
                 // Change all subprocesses to normal form
                 process.subProcesses.forEach((subProcess) => {
                     var normalFormSubProcess = this.getNormalFormFromProcess(subProcess);
                     newSubProcesses.push(normalFormSubProcess);
                 });
-                
+
                 return newSubProcesses;
             };
 
-            var normalFormProcess: ccs.Process = process;
-            if (process instanceof ccs.SummationProcess) {
-                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
+            const _this = this;
+            var normalFormProcess: CCS.Process = process;
+            process.dispatchOn<void>({
+                dispatchNullProcess(n: CCS.NullProcess): void { },
 
-                var newSubProcesses: ccs.Process[] = [];
-                normalFormSubprocesses.forEach(subProcess => {
-                    // Null element: P + 0 => P
-                    if (subProcess instanceof ccs.NullProcess) {
-                        return;
-                    }
-                    // Idempotence: P + P => P
-                    else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
-                        return;
-                    }
-                    // Flatten: P + (Q + R) => P + Q + R
-                    else if (subProcess instanceof ccs.SummationProcess) {
-                        subProcess.subProcesses.forEach(nested => {
-                            newSubProcesses.push(nested);
-                        });
-                    }
-                    else {
-                        newSubProcesses.push(subProcess);
-                    }
-                });
-                // Symmetry: P + Q => Q + P, order by id
-                newSubProcesses.sort();
-                normalFormProcess = new ccs.SummationProcess(newSubProcesses);
-            }
-            else if (process instanceof ccs.ActionPrefixProcess) {
-                normalFormProcess = new ccs.ActionPrefixProcess(process.action, this.getNormalFormFromProcess(process.nextProcess));
-            }
-            else if (process instanceof ccs.CompositionProcess) {
-                var normalFormSubprocesses: ccs.Process[] = getSubProcessesInNormalForm(process);
+                dispatchNamedProcess(n: CCS.NamedProcess): void { },
 
-                var newSubProcesses: ccs.Process[] = [];
-                normalFormSubprocesses.forEach(subProcess => {
-                    // Null element: P | 0 => P
-                    if (subProcess instanceof ccs.NullProcess) {
-                        return;
-                    }
-                    // Idempotence is not valid when compositions can synchronize
-                    // Flatten: P | (Q | R) => P | Q | R
-                    else if (subProcess instanceof ccs.CompositionProcess) {
-                        subProcess.subProcesses.forEach(nested => {
-                            newSubProcesses.push(nested);
-                        });
-                    }
-                    else {
-                        newSubProcesses.push(subProcess);
-                    }
-                });
-                // Symmetry: P | Q => Q | P, order by id
-                newSubProcesses.sort();
-                normalFormProcess = new ccs.CompositionProcess(newSubProcesses);
-            }
-            else if (process instanceof ccs.RelabellingProcess) {
-                normalFormProcess = new ccs.RelabellingProcess(this.getNormalFormFromProcess(process.subProcess), process.relabellings);
-            }
-            else if (process instanceof ccs.RestrictionProcess) {
-                normalFormProcess = new ccs.RestrictionProcess(this.getNormalFormFromProcess(process.subProcess), process.restrictedLabels);
-            }
-            else if (process instanceof ccs.NamedProcess) {
-                // Nothing to rewrite
-            }
-            else if (process instanceof ccs.NullProcess) {
-                // Nothing to rewrite
-            }
+                dispatchSummationProcess(n: CCS.SummationProcess): void {
+                    var normalFormSubprocesses: CCS.Process[] = getSubProcessesInNormalForm(n);
+
+                    var newSubProcesses: CCS.Process[] = [];
+                    normalFormSubprocesses.forEach(subProcess => {
+                        // Null element: P + 0 => P
+                        if (subProcess instanceof CCS.NullProcess) {
+                            return;
+                        }
+                        // Idempotence: P + P => P
+                        else if (newSubProcesses.indexOf(subProcess) > -1) { //Includes
+                            return;
+                        }
+                        // Flatten: P + (Q + R) => P + Q + R
+                        else if (subProcess instanceof CCS.SummationProcess) {
+                            subProcess.subProcesses.forEach(nested => {
+                                newSubProcesses.push(nested);
+                            });
+                        }
+                        else {
+                            newSubProcesses.push(subProcess);
+                        }
+                    });
+                    // Symmetry: P + Q => Q + P, order by id
+                    newSubProcesses.sort();
+                    normalFormProcess = new CCS.SummationProcess(newSubProcesses);
+                },
+
+                dispatchCompositionProcess(n: CCS.CompositionProcess): void {
+                    var normalFormSubprocesses: CCS.Process[] = getSubProcessesInNormalForm(n);
+
+                    var newSubProcesses: CCS.Process[] = [];
+                    normalFormSubprocesses.forEach(subProcess => {
+                        // Null element: P | 0 => P
+                        if (subProcess instanceof CCS.NullProcess) {
+                            return;
+                        }
+                        // Idempotence is not valid for compositions 
+                        // Flatten: P | (Q | R) => P | Q | R
+                        else if (subProcess instanceof CCS.CompositionProcess) {
+                            subProcess.subProcesses.forEach(nested => {
+                                newSubProcesses.push(nested);
+                            });
+                        }
+                        else {
+                            newSubProcesses.push(subProcess);
+                        }
+                    });
+                    // Symmetry: P | Q => Q | P, order by id
+                    newSubProcesses.sort();
+                    normalFormProcess = new CCS.CompositionProcess(newSubProcesses);
+                },
+
+                dispatchActionPrefixProcess(n: CCS.ActionPrefixProcess): void {
+                    normalFormProcess = new CCS.ActionPrefixProcess(n.action, _this.getNormalFormFromProcess(n.nextProcess));
+                },
+
+                dispatchRestrictionProcess(n: CCS.RestrictionProcess): void {
+                    normalFormProcess = new CCS.RestrictionProcess(_this.getNormalFormFromProcess(n.subProcess), n.restrictedLabels);
+                },
+
+                dispatchRelabellingProcess(n: CCS.RelabellingProcess): void {
+                    normalFormProcess = new CCS.RelabellingProcess(_this.getNormalFormFromProcess(n.subProcess), n.relabellings);
+                },
+            });
 
             return normalFormProcess;
         }
@@ -180,6 +185,13 @@ module Equivalence {
         }
 
         private getBackEdgePair(leftProcess: ccs.Process, rightProcess: ccs.Process): [CCS.Process, CCS.Process] | undefined {
+            if (leftProcess instanceof ccs.NamedProcess) {
+                leftProcess = leftProcess.subProcess;
+            }
+            if (rightProcess instanceof ccs.NamedProcess) {
+                rightProcess = rightProcess.subProcess;
+            }
+
             const leftNormalForm = this.getNormalFormFromProcess(leftProcess);
             const rightNormalForm = this.getNormalFormFromProcess(rightProcess);
             const processPairs = this.getAllFoundProcessPairs();
