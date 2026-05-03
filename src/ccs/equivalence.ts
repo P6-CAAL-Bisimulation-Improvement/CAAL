@@ -185,13 +185,6 @@ module Equivalence {
         }
 
         private getBackEdgePair(leftProcess: ccs.Process, rightProcess: ccs.Process): [CCS.Process, CCS.Process] | undefined {
-            if (leftProcess instanceof ccs.NamedProcess) {
-                leftProcess = leftProcess.subProcess;
-            }
-            if (rightProcess instanceof ccs.NamedProcess) {
-                rightProcess = rightProcess.subProcess;
-            }
-
             const leftNormalForm = this.getNormalFormFromProcess(leftProcess);
             const rightNormalForm = this.getNormalFormFromProcess(rightProcess);
             const processPairs = this.getAllFoundProcessPairs();
