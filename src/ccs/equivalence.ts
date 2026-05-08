@@ -200,7 +200,6 @@ module Equivalence {
             // for (s, fromRightId), s ----action---> toLeftId.
             // fromRightId must be able to match.
             var rightTransitions = this.defendSuccGen.getSuccessors(fromRightId);
-            var transitionWasBisimilarUpToContext = false;
             rightTransitions.forEach(rightTransition => {
                 //Same action - possible candidate.
                 if (rightTransition.action.equals(action)) {
