@@ -70,14 +70,19 @@ var benchParsing = new Benchmark("Parsing", function () {
     CCSParser.parse(program, {ccs: ccs});
 });
 
-var benchBisim = new Benchmark("Strong Bisimulation", function () {
-    bisimulation(graph);
-}, {
-    'setup': function () {
-        var graph = CCSParser.parse(program, {ccs: ccs});
+var benchBisim = new Benchmark(
+    "Strong Bisimulation",
+    function () {
+        bisimulation(graph);
+    },
+    {
+        'setup': function () {
+            var graph = CCSParser.parse(program, {ccs: ccs});
+        },
+        minSamples: 100,
+        maxTime: 0
     }
-});
-
+);
 var suite = new Benchmark.Suite();
 
 suite
